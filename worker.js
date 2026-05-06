@@ -1,4 +1,4 @@
-// v2
+// Billie v1.0
 //============================================
 //  Billie — WhatsApp Dietary Guidance Bot
 // Cloudflare Worker
