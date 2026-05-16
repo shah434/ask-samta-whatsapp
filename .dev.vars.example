@@ -1,0 +1,14 @@
+# Copy this file to `.dev.vars` and fill in real values from
+# your Cloudflare Worker secrets / your accounts.
+#
+# `.dev.vars` is gitignored — it lives only on your machine.
+# `wrangler dev` reads it automatically.
+
+ANTHROPIC_KEY=sk-ant-...
+WHATSAPP_TOKEN=
+PHONE_NUMBER_ID=
+SUPABASE_URL=
+SUPABASE_KEY=
+GOOGLE_PLACES_KEY=
+VERIFY_TOKEN=
+BRAVE_API_KEY=
