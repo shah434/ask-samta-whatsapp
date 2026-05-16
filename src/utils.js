@@ -47,7 +47,7 @@ const today = todayStringInTimezone(CALENDAR_TZ);
   const profile = `
   CURRENT USER PROFILE:
   Community: ${user.community}
-  Strictness: ${user.strictness}
+  Strictness: ${user.strictness || 'not set'}  
   Language: ${user.language || 'en'}
   Observance: ${user.observance || 'none'}
   City: ${user.city || 'not set'}
