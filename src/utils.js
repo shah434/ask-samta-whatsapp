@@ -88,11 +88,16 @@ export function buildSystemPrompt(user, googleResults, calendarData, sunData, qu
   City: ${user.city || 'not set'}
   Today's date: ${today}`;
 
+  // Truncate Q/A history to cap dynamic token count. Long prior exchanges
+  // (label scans, detailed fasting questions) can easily add 400–600 non-cached
+  // tokens per request. 200 chars per field keeps context useful but bounded.
+  const trunc = (s, n = 200) => s && s.length > n ? s.slice(0, n) + '…' : (s || '');
+
   const history = `
 CONVERSATION HISTORY (most recent last):
-Q1: ${user.history_3_q || ''} A1: ${user.history_3_a || ''}
-Q2: ${user.history_2_q || ''} A2: ${user.history_2_a || ''}
-Q3: ${user.history_1_q || ''} A3: ${user.history_1_a || ''}`;
+Q1: ${trunc(user.history_3_q)} A1: ${trunc(user.history_3_a)}
+Q2: ${trunc(user.history_2_q)} A2: ${trunc(user.history_2_a)}
+Q3: ${trunc(user.history_1_q)} A3: ${trunc(user.history_1_a)}`;
 
   const restaurantData = googleResults && googleResults.length > 0
     ? `\nNEARBY RESTAURANT RESULTS: ${JSON.stringify(googleResults)}
