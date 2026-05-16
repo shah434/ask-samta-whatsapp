@@ -65,7 +65,7 @@ export default {
         // Send reaction immediately
         await sendReaction(phone, messageId, env);
 
-        // ── User lookup / auto-creation ───────────────────────────────────────
+        // -- User lookup / auto-creation -------------------------------------------
         // New users are created immediately with the default diet (currently Jain)
         // so no user row ever has a null community field.
         let user = await getUser(phone, env);
@@ -74,12 +74,12 @@ export default {
           user = await createUser(phone, { community: DEFAULT_DIET }, env);
         }
 
-        // ── Onboarding gate ───────────────────────────────────────────────────
+        // -- Onboarding gate -------------------------------------------------------
         // Onboarding is now a single step: strictness selection (1 / 2 / 3).
         // Community is always pre-set (Jain by default), so we only block on strictness.
         //
-        // If the user sends a bare 1, 2, or 3 → complete onboarding.
-        // Any other message → answer it immediately (with a nudge to set strictness).
+        // If the user sends a bare 1, 2, or 3 -> complete onboarding.
+        // Any other message -> answer it immediately (with a nudge to set strictness).
         const needsOnboarding = !user.strictness;
 
         if (needsOnboarding) {
@@ -97,10 +97,10 @@ export default {
           if (isNewUser) {
             await sendMessage(phone, getWelcomeMessage(), env);
           }
-          // Fall through — needsOnboarding stays true; answer flow uses neutral prompt.
+          // Fall through -- needsOnboarding stays true; answer flow uses neutral prompt.
         }
 
-        // ── Enrichment: location / calendar / sunset ──────────────────────────
+        // -- Enrichment: location / calendar / sunset ------------------------------
         let googleResults = [];
         const location = detectLocation(text);
         const userCommunity = user.community || DEFAULT_DIET;
@@ -141,7 +141,7 @@ export default {
           }
         }
 
-        // ── Build Claude messages ─────────────────────────────────────────────
+        // -- Build Claude messages -------------------------------------------------
         let claudeMessages = [];
 
         if (messageType === 'image') {
@@ -164,4 +164,62 @@ export default {
                 }
               ]
             }];
-          } catch 
+          } catch (err) {
+            console.log('Image processing error:', err.message);
+            await sendMessage(phone, 'I could not process that image. Please try a clearer photo or type out the ingredients list.', env);
+            return new Response('OK', { status: 200 });
+          }
+        } else {
+          claudeMessages = [{ role: 'user', content: text }];
+        }
+
+        // -- Build system prompt ---------------------------------------------------
+        // Unonboarded users get the neutral 3-level grid prompt (no personal profile).
+        // Fully onboarded users get their personalised prompt as normal.
+        const system = needsOnboarding
+          ? buildNeutralSystemPrompt(googleResults, calendarData, sunData)
+          : buildSystemPrompt(user, googleResults, calendarData, sunData);
+
+        const response = await callClaude(claudeMessages, system, env);
+
+        // Parse and apply any profile updates Claude detected in the response
+        const updates = parseProfileUpdate(response);
+        const cleanResponse = stripTags(response);
+
+        if (updates.strictness || updates.community || updates.city) {
+          await updateUser(phone, {
+            ...(updates.strictness && { strictness: updates.strictness }),
+            ...(updates.community && { community: updates.community }),
+            ...(updates.city && { city: updates.city })
+          }, env);
+        }
+
+        // -- Send response ---------------------------------------------------------
+        // Append personalisation nudge for unonboarded users.
+        const finalResponse = needsOnboarding
+          ? cleanResponse + getOnboardingNudge()
+          : cleanResponse;
+
+        await sendMessage(phone, finalResponse, env);
+        await saveHistory(phone, user, text, cleanResponse, env);
+
+        // Increment message count (onboarded users only)
+        if (!needsOnboarding) {
+          await incrementMessageCount(phone, env);
+          // Donation nudge intentionally disabled -- re-enable when the time is right.
+          // if (count > 0 && count % 30000 === 0) {
+          //   await sendMessage(phone, `You have sent ${count} messages with Samta!...`, env);
+          // }
+        }
+
+        return new Response('OK', { status: 200 });
+
+      } catch (err) {
+        console.log('Main handler error:', err.message, err.stack);
+        return new Response('OK', { status: 200 });
+      }
+    }
+
+    return new Response('Method not allowed', { status: 405 });
+  }
+};
