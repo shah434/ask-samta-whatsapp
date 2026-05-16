@@ -81,6 +81,13 @@ export default {
         const text = message.text?.body || message.image?.caption || '';
         const t0 = Date.now();
 
+        // For image messages, fire an immediate acknowledgment so the user sees
+        // something within ~200ms instead of waiting the full 4+ seconds.
+        // Not awaited — runs in the background while Phase 1 executes.
+        if (messageType === 'image') {
+          sendMessage(phone, 'Scanning your label... 🔍', env);
+        }
+
         // -- Phase 1: Parallel I/O ------------------------------------------------
         // Kick off everything we can before we know anything about the user.
         // getImageAsBase64 makes two sequential Meta API calls (~500ms) so starting
