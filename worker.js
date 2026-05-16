@@ -130,7 +130,7 @@ if (user.community === 'jain') {
   const events = await getTodayAndUpcomingEvents();
   calendarData = formatEventsForClaude(events);
   }
-}
+
 
         // Fetch sunrise/sunset if query is about sun times
         let sunData = '';
