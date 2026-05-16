@@ -148,16 +148,4 @@ export function formatEventsForClaude(events) {
 
   return debugHeader + lines.join('\n');
 }
-  
-  const today = todayInTimezone(CALENDAR_TZ);
-  
-  const lines = events.map(event => {
-    const isToday = event.date.toDateString() === today.toDateString();
-    const dateLabel = isToday 
-      ? 'TODAY' 
-      : event.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    return `${dateLabel}: ${event.summary}`;
-  });
-  
-  return lines.join('\n');
-}
+
