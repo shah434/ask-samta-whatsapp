@@ -79,13 +79,11 @@ export default {
         // -- User lookup / auto-creation -------------------------------------------
         // New users are created immediately with the default community (Jain).
         // No community-asking flow — that comes back when BAPS launches.
-        let user = await getUser(phone, env);
-        const isNewUser = !user;
-        if (isNewUser) {
-          user = await createUser(phone, { community: DEFAULT_DIET }, env);
-          await sendMessage(phone, getWelcomeMessage(), env);
-          // Fall through — let them ask anything immediately
-        }
+      if (isNewUser) {
+      user = await createUser(phone, { community: DEFAULT_DIET }, env);
+      await sendMessage(phone, getWelcomeMessage(), env);
+      return new Response('OK', { status: 200 });
+    }
 
         // -- Pending strictness reply check ---------------------------------------
         // If we previously asked for strictness and this looks like a 1/2/3 reply,
