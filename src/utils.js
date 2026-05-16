@@ -4,6 +4,18 @@
 
 import { CORE_IDENTITY, RULES_JAIN, RULES_BAPS, USE_CASES, NEUTRAL_JAIN_INSTRUCTIONS } from './prompts.js';
 
+const CALENDAR_TZ = 'America/New_York';
+
+function todayStringInTimezone(tz) {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  }).format(new Date());
+}
+
 export function parseProfileUpdate(text) {
   const strictnessMatch = text.match(/\[STRICTNESS_UPDATE:\s*(strict|moderate|flexible)\]/i);
   const communityMatch = text.match(/\[COMMUNITY_UPDATE:\s*(jain|baps)\]/i);
@@ -25,7 +37,7 @@ export function stripTags(text) {
 
 export function buildSystemPrompt(user, googleResults, calendarData, sunData) {
   const rules = user.community === 'baps' ? RULES_BAPS : RULES_JAIN;
-  const today = new Date().toDateString();
+const today = todayStringInTimezone(CALENDAR_TZ);
   const sun = sunData ? `\n${sunData}` : '';
 
   // STATIC — cached by Anthropic (same for all users of same community)
