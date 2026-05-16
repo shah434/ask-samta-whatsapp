@@ -1,112 +1,56 @@
 // ============================================
-// onboarding.js — User onboarding flow
-// ============================================
-//
-// DIET EXPANSION GUIDE:
-//   1. Add your new diet to SUPPORTED_DIETS below (e.g. { id: 'baps', label: 'BAPS Swaminarayan' }).
-//   2. When SUPPORTED_DIETS.length > 1 the diet-picker step auto-enables (see DIET_EXPANSION
-//      comments in handleOnboarding below).
-//   3. Before launching, run a DB migration:
-//        UPDATE users SET community = 'jain' WHERE community IS NULL;
-//      so existing users are not presented with the picker on their next message.
+// onboarding.js — Welcome + strictness reply handling
 // ============================================
 
 import { updateUser } from './database.js';
 import { sendMessage } from './whatsapp.js';
 
-// -- Diet registry ----------------------------------------------------------------
-// Add entries here to support additional diets.
-// When length === 1 the single diet is auto-assigned and the picker step is skipped.
-export const SUPPORTED_DIETS = [
-  { id: 'jain', label: 'Jain' },
-  // { id: 'baps', label: 'BAPS Swaminarayan' },  // uncomment to re-enable
-];
+// Default community for new users. Change when BAPS launches.
+export const DEFAULT_DIET = 'jain';
 
-export const DEFAULT_DIET = SUPPORTED_DIETS[0].id;       // 'jain'
-const MULTI_DIET        = SUPPORTED_DIETS.length > 1;    // false for now
+export function getWelcomeMessage() {
+  return `Jai Jinendra 🙏 I'm Samta — your friend for daily Jain questions.
 
-// -- Message helpers --------------------------------------------------------------
+What I can help with:
+- Scan food labels and packaged products
+- Check if dishes are safe to eat
+- Find Jain-friendly restaurants
+- Tithi, fast days, and sunset times
+- Ingredient substitutions
+- Medicine and supplement checks
 
-function buildDietPickerMessage() {
-  const lines = SUPPORTED_DIETS.map((d, i) => `${i + 1} — ${d.label}`);
-  return `Which dietary tradition do you follow?\n${lines.join('\n')}`;
+Ask me a question from the above topics or send a picture of food/ingredients to get started! 🙏`;
 }
 
-function buildStrictnessQuestion() {
-  // DIET_EXPANSION: pass community label here if you want community-specific wording.
-  return `How strictly do you follow Jain dietary rules?
-1 — Strict (all rules, no exceptions)
+export function getStrictnessQuestion() {
+  return `So I can tailor future answers — which fits you?
+1 — Strict (no root veg, no fermented, no exceptions)
 2 — Moderate (core rules, flexible on edge cases)
 3 — Flexible (basic vegetarian rules)`;
 }
 
-// Called by worker.js to start or re-prompt onboarding.
-export function getOnboardingMessage(reason, user) {
-  if (reason === 'new_user') {
-    // DIET_EXPANSION: when MULTI_DIET is true, show the diet picker first.
-    if (MULTI_DIET) {
-      return `Jai Jinendra! I'm Samta, your dietary guidance assistant.\n\n${buildDietPickerMessage()}`;
-    }
-    return `Jai Jinendra! I'm Samta, your Jain dietary assistant.\n\n${buildStrictnessQuestion()}`;
+// Called when a user has pending_strictness_ask=true and sends a message.
+// If it's a valid 1/2/3 reply, save and confirm. Otherwise clear the flag
+// silently and let the normal flow handle the message.
+// Returns true if handled (and the worker should return), false otherwise.
+export async function applyStrictnessReply(phone, text, env) {
+  const input = (text || '').trim();
+  if (!['1', '2', '3'].includes(input)) {
+    // Not a strictness reply — clear flag and let normal flow handle it
+    await updateUser(phone, { pending_strictness_ask: false }, env);
+    return false;
   }
 
-  if (reason === 'no_diet') {
-    return buildDietPickerMessage();
-  }
+  const strictness = { '1': 'strict', '2': 'moderate', '3': 'flexible' }[input];
+  await updateUser(phone, {
+    strictness,
+    pending_strictness_ask: false
+  }, env);
 
-  if (reason === 'no_strictness') {
-    return buildStrictnessQuestion();
-  }
-}
-
-// Appended to the food-answer message for any unonboarded user.
-export function getOnboardingNudge() {
-  return `\n\nReply 1 (Strict), 2 (Moderate), or 3 (Flexible) to personalise future answers.`;
-}
-
-// Sent as a separate first message for brand-new users who open with a food question.
-export function getWelcomeMessage() {
-  return `Jai Jinendra! I'm Samta, your Jain dietary guide. I'll answer your question right away — then you can tell me your strictness level for personalised answers.`;
-}
-
-// -- Onboarding state machine -----------------------------------------------------
-// Called only when the user sends a bare 1 / 2 / 3 (an explicit onboarding response).
-
-export async function handleOnboarding(phone, user, text, env) {
-  const input = text.trim();
-
-  // DIET_EXPANSION: when MULTI_DIET is true, handle diet selection before strictness.
-  // if (MULTI_DIET && !user.community) {
-  //   const idx = parseInt(input, 10) - 1;
-  //   const chosen = SUPPORTED_DIETS[idx];
-  //   if (chosen) {
-  //     await updateUser(phone, { community: chosen.id }, env);
-  //     await sendMessage(phone, buildStrictnessQuestion(), env);
-  //   } else {
-  //     await sendMessage(phone, buildDietPickerMessage(), env);
-  //   }
-  //   return;
-  // }
-
-  if (!user.strictness) {
-    const strictnessMap = { '1': 'strict', '2': 'moderate', '3': 'flexible' };
-    const strictness = strictnessMap[input];
-
-    if (strictness) {
-      await updateUser(phone, { strictness }, env);
-      await sendMessage(phone, `You're all set!
-
-Send me a photo of any food label, a menu, or ask if something is safe to eat.
-
-You can also ask:
-- Is today a fast day?
-- Find Jain restaurants near me
-- What can I eat during Paryushana?
-- What can I substitute for onion?`, env);
-    } else {
-      // Unexpected input — re-prompt
-      await sendMessage(phone, buildStrictnessQuestion(), env);
-    }
-    return;
-  }
+  await sendMessage(
+    phone,
+    `Got it 🙏 set you to ${strictness}. Ask me anything!`,
+    env
+  );
+  return true;
 }
