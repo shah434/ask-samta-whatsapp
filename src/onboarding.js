@@ -11,15 +11,16 @@ export const DEFAULT_DIET = 'jain';
 export function getWelcomeMessage() {
   return `Jai Jinendra 🙏 I'm Samta — your friend for daily Jain questions.
 
-What I can help with:
-- Scan food labels and packaged products
-- Check if dishes are safe to eat
-- Find Jain-friendly restaurants
-- Tithi, fast days, and sunset times
-- Ingredient substitutions
-- Medicine and supplement checks
 
-Ask me a question from the above topics or send a picture of food/ingredients to get started! 🙏`;
+You can ask me things like:
+- Is today a fast day?
+- What time is sunrise / sunset?
+- What can I eat during Paryushana?
+- Find Jain restaurants near me
+- What can I substitute for onion?
+- Are the ingredients in this food or supplement safe?
+
+Or send a photo of any food label, menu, or product to scan 🙏`;
 }
 
 export function getStrictnessQuestion() {
