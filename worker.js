@@ -129,10 +129,6 @@ let calendarData = '';
 if (user.community === 'jain') {
   const events = await getTodayAndUpcomingEvents();
   calendarData = formatEventsForClaude(events);
-
-  // DEBUG — remove after fixing tithi bug
-  if (phone === '16144067875') {
-    await sendMessage(phone, `[DEBUG] Calendar data:\n${calendarData || '(empty)'}`, env);
   }
 }
 
