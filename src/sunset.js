@@ -68,12 +68,17 @@ function formatTime(utcString, timezoneId) {
 export function formatSunDataForClaude(sunData) {
   if (!sunData) return '';
   return `
-SUNRISE/SUNSET FOR ${sunData.city.toUpperCase()}:
+========================================
+EXACT SUNRISE/SUNSET DATA FOR THIS REPLY:
+City: ${sunData.city}
 Sunrise: ${sunData.sunrise}
 Sunset: ${sunData.sunset}
 Timezone: ${sunData.timezoneId}
-Note: For religious precision always verify 
-with timeanddate.com or your local panchang`;
+========================================
+You MUST use these exact times verbatim.
+Do NOT round, estimate, recalculate, or change them.
+If you write any time other than "${sunData.sunset}" for sunset
+or "${sunData.sunrise}" for sunrise, you are wrong.`;
 }
 
 export function detectSunsetQuery(text) {
