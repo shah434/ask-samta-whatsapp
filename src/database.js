@@ -18,7 +18,7 @@ export async function getUser(phone, env) {
 
 // initialFields lets callers pre-populate columns at creation time
 // (e.g. { community: 'jain' } so we never have a user row with a null community).
-export async function createUser(phone, initialFields = {}, env) {
+export async function createUser(phone, fields, env) {
   const res = await fetch(
     `${env.SUPABASE_URL}/rest/v1/users`,
     {
@@ -29,7 +29,7 @@ export async function createUser(phone, initialFields = {}, env) {
         'Content-Type': 'application/json',
         Prefer: 'return=representation'
       },
-      body: JSON.stringify({ phone_number: phone, ...initialFields })
+      body: JSON.stringify({ phone_number: phone, ...fields })
     }
   );
   const data = await res.json();
