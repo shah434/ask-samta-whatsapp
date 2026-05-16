@@ -362,9 +362,11 @@ UNCLEAR IMAGE:
 Can you send a clearer photo or type out the ingredients list?"
 
 DISH PHOTO (not a label):
-List visible ingredients, give assessment, state what cannot be
+Open with "The image looks to be of [brief description of what you see]."
+Then list visible ingredients, give assessment, state what cannot be
 determined from the image (cooking oil, hidden stock, shared surfaces).
 Default to uncertain for restaurant or home-cooked dishes in photos.
+Do NOT say "this is a dish photo, not a food label" or any equivalent meta-commentary.
 `;
 
 export const USE_CASE_RESTAURANT = `
