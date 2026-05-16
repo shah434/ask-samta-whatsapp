@@ -1,6 +1,13 @@
-// Samta v1.9
+// Samta v2.0
 // ============================================
 // worker.js — Main Cloudflare Worker handler
+// ============================================
+// v2.0 perf changes:
+//   - Phase 1: sendReaction + getUser + getCalendarCached + getImageAsBase64
+//     all run in parallel via Promise.all (saves ~500ms off the preamble)
+//   - saveHistory + incrementMessageCount deferred to ctx.waitUntil so they
+//     don't block the user-visible sendMessage (saves ~650ms post-response)
+//   - incrementMessageCount no longer does a redundant getUser round-trip
 // ============================================
 
 import { getUser, createUser, updateUser, saveHistory, incrementMessageCount } from './src/database.js';
@@ -29,7 +36,7 @@ export default {
     }
   },
 
-  async fetch(req, env) {
+  async fetch(req, env, ctx) {
 
     // Handle Meta webhook verification
     if (req.method === 'GET') {
@@ -72,14 +79,26 @@ export default {
         }
 
         const text = message.text?.body || message.image?.caption || '';
+        const t0 = Date.now();
 
-        // Send reaction immediately
-        await sendReaction(phone, messageId, env);
+        // -- Phase 1: Parallel I/O ------------------------------------------------
+        // Kick off everything we can before we know anything about the user.
+        // getImageAsBase64 makes two sequential Meta API calls (~500ms) so starting
+        // it here means it overlaps with the user lookup instead of following it.
+        const imagePromise = messageType === 'image'
+          ? getImageAsBase64(message.image.id, message.image.mime_type, env)
+          : null;
 
-        // -- User lookup / auto-creation -------------------------------------------
-        // New users are created immediately with the default community (Jain).
-        // No community-asking flow — that comes back when BAPS launches.
-        let user = await getUser(phone, env);
+        // sendReaction, getUser, and calendar are all independent — run together.
+        let user, calendarEvents;
+        [, user, calendarEvents] = await Promise.all([
+          sendReaction(phone, messageId, env),
+          getUser(phone, env),
+          getCalendarCached(env),   // KV read (~5ms hit); safe to prefetch for all users
+        ]);
+        console.log(`[perf] phase1_parallel=${Date.now() - t0}ms type=${messageType}`);
+
+        // -- User lookup / auto-creation ------------------------------------------
         const isNewUser = !user;
         if (isNewUser) {
           user = await createUser(phone, { community: DEFAULT_DIET }, env);
@@ -88,9 +107,6 @@ export default {
         }
 
         // -- Pending strictness reply check ---------------------------------------
-        // If we previously asked for strictness and this looks like a 1/2/3 reply,
-        // handle it here and return. If it's not a valid reply, the helper clears
-        // the flag and returns false so the normal flow continues.
         if (user.pending_strictness_ask && messageType === 'text') {
           const handled = await applyStrictnessReply(phone, text, env);
           if (handled) return new Response('OK', { status: 200 });
@@ -98,7 +114,7 @@ export default {
           user = await getUser(phone, env);
         }
 
-        // -- Enrichment: location / calendar / sunset ------------------------------
+        // -- Enrichment: location / calendar / sunset -----------------------------
         let googleResults = [];
         const location = detectLocation(text);
 
@@ -110,11 +126,10 @@ export default {
           await updateUser(phone, { city: location }, env);
         }
 
-        // Fetch Jain calendar if user is Jain
+        // Calendar already fetched in Phase 1 — just format if user is Jain
         let calendarData = '';
         if (user.community === 'jain') {
-          const events = await getCalendarCached(env);
-          calendarData = formatEventsForClaude(events);
+          calendarData = formatEventsForClaude(calendarEvents);
         }
 
         // Fetch sunrise/sunset if query is about sun times
@@ -138,16 +153,15 @@ export default {
           }
         }
 
-        // -- Build Claude messages -------------------------------------------------
+        // -- Build Claude messages ------------------------------------------------
+        // imagePromise was started in Phase 1 — it's almost certainly resolved by
+        // the time we reach here (~500ms of user lookup + calendar has elapsed).
         let claudeMessages = [];
 
         if (messageType === 'image') {
           try {
-            const { base64, mimeType } = await getImageAsBase64(
-              message.image.id,
-              message.image.mime_type,
-              env
-            );
+            const { base64, mimeType } = await imagePromise;
+            console.log(`[perf] image_ready=${Date.now() - t0}ms`);
             claudeMessages = [{
               role: 'user',
               content: [
@@ -173,9 +187,9 @@ export default {
         // -- Build system prompt and call Claude ----------------------------------
         const queryTypes = classifyQuery(text, messageType === 'image');
         const system = buildSystemPrompt(user, googleResults, calendarData, sunData, queryTypes);
+        console.log(`[perf] claude_start=${Date.now() - t0}ms`);
         const response = await callClaude(claudeMessages, system, env);
-
-        // Parse profile updates
+        console.log(`[perf] claude_done=${Date.now() - t0}ms`);
         const updates = parseProfileUpdate(response);
         let cleanResponse = stripTags(response);
 
@@ -188,6 +202,8 @@ export default {
         }
 
         // -- Strictness ask detection ---------------------------------------------
+        // Keep this updateUser synchronous: if the user replies before our deferred
+        // writes land, the next webhook needs to see pending_strictness_ask = true.
         if (response.includes('[ASK_STRICTNESS]') && !user.strictness && !updates.strictness) {
           cleanResponse = cleanResponse.replace(/\[ASK_STRICTNESS\]/gi, '').trim();
           cleanResponse += '\n\n' + getStrictnessQuestion();
@@ -196,12 +212,15 @@ export default {
           cleanResponse = cleanResponse.replace(/\[ASK_STRICTNESS\]/gi, '').trim();
         }
 
-        // -- Send response ---------------------------------------------------------
+        // -- Send response --------------------------------------------------------
         await sendMessage(phone, cleanResponse, env);
-        await saveHistory(phone, user, text, cleanResponse, env);
-
-        // Increment message count
-        await incrementMessageCount(phone, env);
+        console.log(`[perf] sent=${Date.now() - t0}ms TOTAL`);
+        // These run after the 200 is returned to Meta — the user already has their
+        // reply and doesn't wait for these.
+        ctx.waitUntil(Promise.all([
+          saveHistory(phone, user, text, cleanResponse, env),
+          incrementMessageCount(phone, user.message_count, env),
+        ]));
 
         return new Response('OK', { status: 200 });
 

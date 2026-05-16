@@ -62,9 +62,9 @@ export async function saveHistory(phone, user, question, answer, env) {
   }, env);
 }
 
-export async function incrementMessageCount(phone, env) {
-  const user = await getUser(phone, env);
-  const count = (user?.message_count || 0) + 1;
+// Takes the already-fetched count so we avoid a redundant getUser round-trip.
+export async function incrementMessageCount(phone, currentCount, env) {
+  const count = (currentCount || 0) + 1;
   await updateUser(phone, { message_count: count }, env);
   return count;
 }
