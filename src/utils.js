@@ -1,19 +1,49 @@
 // ============================================
-// utils.js — Utility and helper functions v1
+// utils.js — Utility and helper functions v2
 // ============================================
 
-import { CORE_IDENTITY, RULES_JAIN, RULES_BAPS, USE_CASES, NEUTRAL_JAIN_INSTRUCTIONS } from './prompts.js';
+import {
+  CORE_IDENTITY,
+  RULES_JAIN,
+  RULES_BAPS,
+  USE_CASE_GENERAL,
+  USE_CASE_LABEL_SCAN,
+  USE_CASE_RESTAURANT,
+  USE_CASE_SUBSTITUTION,
+  USE_CASE_MEDICINE,
+  USE_CASE_FASTING,
+  USE_CASE_CALENDAR,
+} from './prompts.js';
 
-const CALENDAR_TZ = 'America/New_York';
+const USE_CASE_BLOCKS = {
+  general: USE_CASE_GENERAL,
+  label_scan: USE_CASE_LABEL_SCAN,
+  restaurant: USE_CASE_RESTAURANT,
+  substitution: USE_CASE_SUBSTITUTION,
+  medicine: USE_CASE_MEDICINE,
+  fasting: USE_CASE_FASTING,
+  calendar: USE_CASE_CALENDAR,
+};
 
-function todayStringInTimezone(tz) {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: tz,
-    weekday: 'short',
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric'
-  }).format(new Date());
+// Classify an incoming query so we send only the relevant USE_CASE block.
+// Returns an array of use case keys (most queries return one, but some need two,
+// e.g. fasting + substitution if a user asks "what can I substitute for ghee
+// during my fast"). General is always included as a fallback.
+export function classifyQuery(text, hasImage) {
+  const lower = (text || '').toLowerCase();
+  const types = new Set();
+
+  if (hasImage) types.add('label_scan');
+  if (/\b(restaurant|restaurants|eat near|food near|where to eat|where can i eat|find jain|find baps)\b/.test(lower)) types.add('restaurant');
+  if (/\b(substitute|substitution|alternative|alternatives|instead of|replace|swap)\b/.test(lower)) types.add('substitution');
+  if (/\b(medicine|medication|supplement|capsule|tablet|drug|pill|pharma|prescription|vitamin)\b/.test(lower)) types.add('medicine');
+  if (/\b(fast|fasting|upvas|ekasana|ayambil|biyasana|chauvihar|tivihar|duvihar|navkarsi|paryushana|ekadashi|nirjala|jalahar|farari|nom|punam|chaturmas)\b/.test(lower)) types.add('fasting');
+  if (/\b(tithi|sunset|sunrise|calendar|today.*(safe|special|fast|tithi)|what.*day)\b/.test(lower)) types.add('calendar');
+
+  // If nothing matched, default to general dietary
+  if (types.size === 0) types.add('general');
+
+  return Array.from(types);
 }
 
 export function parseProfileUpdate(text) {
@@ -35,19 +65,24 @@ export function stripTags(text) {
     .trim();
 }
 
-export function buildSystemPrompt(user, googleResults, calendarData, sunData) {
+export function buildSystemPrompt(user, googleResults, calendarData, sunData, queryTypes) {
   const rules = user.community === 'baps' ? RULES_BAPS : RULES_JAIN;
-const today = todayStringInTimezone(CALENDAR_TZ);
+  const today = new Date().toDateString();
   const sun = sunData ? `\n${sunData}` : '';
 
-  // STATIC — cached by Anthropic (same for all users of same community)
-  const staticContent = CORE_IDENTITY + rules + USE_CASES;
+  // Assemble only the relevant use case blocks. queryTypes is an array;
+  // fall back to general if missing or empty.
+  const types = (Array.isArray(queryTypes) && queryTypes.length > 0) ? queryTypes : ['general'];
+  const useCases = types.map(t => USE_CASE_BLOCKS[t] || '').join('\n');
+
+  // STATIC — cached by Anthropic (same for all users of same community + query type)
+  const staticContent = CORE_IDENTITY + rules + useCases;
 
   // DYNAMIC — changes every message, not cached
   const profile = `
   CURRENT USER PROFILE:
   Community: ${user.community}
-  Strictness: ${user.strictness || 'not set'}  
+  Strictness: ${user.strictness || 'not set'}
   Language: ${user.language || 'en'}
   Observance: ${user.observance || 'none'}
   City: ${user.city || 'not set'}
@@ -74,7 +109,6 @@ End with: "Call ahead to confirm dietary requirements"`
 
   const dynamicContent = profile + history + restaurantData + calendar + sun;
 
-  // Return as array — static part gets cached, dynamic part does not
   return [
     {
       type: 'text',
@@ -84,50 +118,6 @@ End with: "Call ahead to confirm dietary requirements"`
     {
       type: 'text',
       text: dynamicContent
-    }
-  ];
-}
-
-// Used for unonboarded users who send a food question before completing setup.
-// Returns a 3-row Strict / Moderate / Flexible grid instead of a personalised verdict.
-// DIET_EXPANSION: if you add diets, create a parallel buildNeutral<Diet>SystemPrompt here.
-export function buildNeutralSystemPrompt(googleResults, calendarData, sunData) {
-  const today = new Date().toDateString();
-
-  // STATIC — Jain rules + neutral format instructions, cached across all unonboarded users
-  const staticContent = CORE_IDENTITY + RULES_JAIN + USE_CASES + NEUTRAL_JAIN_INSTRUCTIONS;
-
-  // DYNAMIC — date, optional enrichment data
-  const parts = [`Today's date: ${today}`];
-
-  if (googleResults && googleResults.length > 0) {
-    parts.push(
-      `NEARBY RESTAURANT RESULTS: ${JSON.stringify(googleResults)}\n` +
-      `FORMATTING RULE: For each restaurant include name, address, ` +
-      `phone number (nationalPhoneNumber field — always include if present in data), ` +
-      `rating, and whether currently open.\n` +
-      `Ask staff: "Do you avoid onion and garlic in any form including powder?"\n` +
-      `End with: "Call ahead to confirm dietary requirements"`
-    );
-  }
-
-  if (calendarData) {
-    parts.push(`JAIN CALENDAR — NEXT 30 DAYS:\n${calendarData}`);
-  }
-
-  if (sunData) {
-    parts.push(sunData);
-  }
-
-  return [
-    {
-      type: 'text',
-      text: staticContent,
-      cache_control: { type: 'ephemeral' }
-    },
-    {
-      type: 'text',
-      text: parts.join('\n\n')
     }
   ];
 }
