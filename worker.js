@@ -80,8 +80,9 @@ export default {
         // New users are created immediately with the default community (Jain).
         // No community-asking flow — that comes back when BAPS launches.
       if (isNewUser) {
-      user = await createUser(phone, { community: DEFAULT_DIET }, env);
-      await sendMessage(phone, getWelcomeMessage(), env);
+      user = await createUser(phone, env);
+      await updateUser(phone, { community: DEFAULT_DIET }, env);
+      user.community = DEFAULT_DIET; // keep local copy in sync      await sendMessage(phone, getWelcomeMessage(), env);
       return new Response('OK', { status: 200 });
     }
 
