@@ -7,6 +7,7 @@ import { getUser, createUser, updateUser, saveHistory, incrementMessageCount } f
 import { sendMessage, sendReaction, getImageAsBase64 } from './src/whatsapp.js';
 import { callClaude } from './src/claude.js';
 import { searchRestaurants, detectLocation } from './src/location.js';
+import { parseProfileUpdate, stripTags, buildSystemPrompt, classifyQuery } from './src/utils.js';
 import {
   DEFAULT_DIET,
   getWelcomeMessage,
@@ -170,9 +171,10 @@ export default {
           claudeMessages = [{ role: 'user', content: text }];
         }
 
-        // -- Build system prompt and call Claude ----------------------------------
-        const system = buildSystemPrompt(user, googleResults, calendarData, sunData);
-        const response = await callClaude(claudeMessages, system, env);
+     // -- Build system prompt and call Claude ----------------------------------
+      const queryTypes = classifyQuery(text, messageType === 'image');
+      const system = buildSystemPrompt(user, googleResults, calendarData, sunData, queryTypes);
+      const response = await callClaude(claudeMessages, system, env);
 
         // Parse profile updates
         const updates = parseProfileUpdate(response);
