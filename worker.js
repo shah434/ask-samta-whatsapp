@@ -24,9 +24,17 @@ export default {
       const events = await getTodayAndUpcomingEvents();
       await env.KV.put('jain_calendar_events', JSON.stringify(events), { expirationTtl: 86400 });
       console.log('Calendar cache pre-warmed:', events.length, 'events');
-    } catch (err) {
-      console.log('Scheduled calendar refresh error:', err.message);
+   } catch (err) {
+  console.log('Main handler error:', err.message, err.stack);
+  try {
+    const body = await req.clone().json();
+    const phone = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from;
+    if (phone) {
+      await sendMessage(phone, `⚠️ Error: ${err.message}\n${(err.stack || '').slice(0, 500)}`, env);
     }
+  } catch {}
+  return new Response('OK', { status: 200 });
+}
   },
 
   async fetch(req, env) {
