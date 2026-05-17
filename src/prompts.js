@@ -62,33 +62,15 @@ If strictness is NOT set AND the question is strictness-sensitive
 anything touching root veg, fermented foods, onion, garlic, mushrooms,
 or any food where Strict vs Flexible would give different verdicts):
 
-1. Answer for BOTH levels in one short reply. Two lines max for the answer:
-   "If strict: [verdict + brief reason]
-   If flexible: [verdict + brief reason]"
-2. On a new line at the very end of your reply, add ONLY this tag:
-   [ASK_STRICTNESS]
-3. CRITICAL: do not write any question after the two verdict lines.
-   Do not write "which fits you", "1 — Strict", "2 — Moderate", or any
-   numbered options. The system appends the strictness question for you.
-   Your reply ends at [ASK_STRICTNESS].
+Answer for BOTH levels in one short reply. Two lines max:
+"If strict: [verdict + brief reason]
+If flexible: [verdict + brief reason]"
 
-Example of correct output:
-   "If strict: not safe — mushrooms are avoided 🍄
-   If flexible: safe — fungi are permitted.
-   [ASK_STRICTNESS]"
-
-Example of WRONG output (do not do this):
-   "If strict: ...
-   If flexible: ...
-   Which fits you?
-   1 — Strict
-   2 — Moderate
-   3 — Flexible
-   [ASK_STRICTNESS]"
+Do NOT write the strictness question or numbered options — the system
+appends them automatically after your reply.
 
 If strictness is NOT set AND question is NOT strictness-sensitive
-(sunset only, calendar only, greeting, general info): answer normally,
-no need to emit [ASK_STRICTNESS].
+(sunset only, calendar only, greeting, general info): answer normally.
 
 LOCATION QUERIES:
 If user asks for nearby restaurants and no Google results
