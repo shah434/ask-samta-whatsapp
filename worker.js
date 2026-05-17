@@ -91,7 +91,7 @@ export default {
         // something within ~200ms instead of waiting the full 4+ seconds.
         // Not awaited — runs in the background while Phase 1 executes.
         if (messageType === 'image') {
-          sendMessage(phone, 'Scanning your label... 🔍', env);
+          sendMessage(phone, 'Reviewing your request... 🔍', env);
         }
 
         // -- Phase 1: Parallel I/O ------------------------------------------------
