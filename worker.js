@@ -236,4 +236,50 @@ export default {
         }
 
         // -- Strictness ask detection ---------------------------------------------
-        // Keep this updateUser synchronous: if the user
+        // Keep this updateUser synchronous: if the user replies before our deferred
+        // writes land, the next webhook needs to see pending_strictness_ask = true.
+        if (response.includes('[ASK_STRICTNESS]') && !user.strictness && !updates.strictness) {
+          cleanResponse = cleanResponse.replace(/\[ASK_STRICTNESS\]/gi, '').trim();
+          cleanResponse += '\n\n' + getStrictnessQuestion();
+          await updateUser(phone, { pending_strictness_ask: true }, env);
+        } else {
+          cleanResponse = cleanResponse.replace(/\[ASK_STRICTNESS\]/gi, '').trim();
+        }
+
+        // -- Send response --------------------------------------------------------
+        await sendMessage(phone, cleanResponse, env);
+        console.log(`[perf] sent=${Date.now() - t0}ms TOTAL`);
+        // Single combined write: history + message count in one Supabase PATCH,
+        // then KV cache updated with merged result. Runs after 200 is returned —
+        // user doesn't wait, and no race condition since it's one sequential write.
+        ctx.waitUntil((async () => {
+          await updateUser(phone, {
+            history_1_q: text,
+            history_1_a: cleanResponse,
+            history_2_q: user.history_1_q || '',
+            history_2_a: user.history_1_a || '',
+            history_3_q: user.history_2_q || '',
+            history_3_a: user.history_2_a || '',
+            message_count: (user.message_count || 0) + 1,
+          }, env);
+        })());
+
+        return new Response('OK', { status: 200 });
+
+      } catch (err) {
+        console.log('Main handler error:', err.message, err.stack);
+        // Surface errors to the user who triggered them — remove after debugging
+        try {
+          const debugBody = await req.clone().json();
+          const debugPhone = debugBody?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from;
+          if (debugPhone) {
+            await sendMessage(debugPhone, `⚠️ Error: ${err.message}\n${(err.stack || '').slice(0, 500)}`, env);
+          }
+        } catch {}
+        return new Response('OK', { status: 200 });
+      }
+    }
+
+    return new Response('Method not allowed', { status: 405 });
+  }
+};
