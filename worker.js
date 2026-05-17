@@ -116,7 +116,8 @@ export default {
         if (isNewUser) {
           user = await createUser(phone, { community: DEFAULT_DIET }, env);
           await sendMessage(phone, getWelcomeMessage(), env);
-          return new Response('OK', { status: 200 });
+          // Do NOT return early — continue to process the user's first message
+          // so they get a food response + strictness question in the same interaction.
         }
 
         // -- Pending delete confirmation check ------------------------------------
