@@ -10,7 +10,7 @@
 //     deferred via ctx.waitUntil — user doesn't wait, no race condition
 // ============================================
 
-import { getUser, createUser, updateUser, deleteUser } from './src/database.js';
+import { getUser, createUser, updateUser, deleteUser, setFlagKV } from './src/database.js';
 import { sendMessage, sendReaction, sendImage, getImageAsBase64 } from './src/whatsapp.js';
 
 const VIN_FAMILY_URL = 'https://raw.githubusercontent.com/shah434/whatsapp-religious-friend/ad4ff7ebb697e22a7ba7abac1e0c94e4c7af3987/vin%20family.png';
@@ -247,10 +247,13 @@ export default {
         // Keep updateUser synchronous: next webhook must see pending_strictness_ask=true
         // in case the user replies before deferred writes land.
         cleanResponse = cleanResponse.replace(/\[ASK_STRICTNESS\]/gi, '').trim();
-        if (!user.strictness && !updates.strictness) {
+        const needsStrictnessAsk = !user.strictness && !updates.strictness;
+        if (needsStrictnessAsk) {
           cleanResponse += '\n\n' + getStrictnessQuestion();
           cleanResponse += '\n\n💡 Type *help* anytime to see what else I can do.';
-          await updateUser(phone, { pending_strictness_ask: true }, env);
+          // KV-only write (~5ms) so the next webhook sees the flag immediately.
+          // Supabase is updated in ctx.waitUntil below alongside history.
+          await setFlagKV(phone, { pending_strictness_ask: true }, env);
         }
 
         // -- Send response --------------------------------------------------------
@@ -269,6 +272,8 @@ export default {
             history_3_q: user.history_2_q || '',
             history_3_a: user.history_2_a || '',
             message_count: (user.message_count || 0) + 1,
+            // Persist the flag to Supabase — KV was already written synchronously above.
+            ...(needsStrictnessAsk && { pending_strictness_ask: true }),
           }, env);
         })());
 

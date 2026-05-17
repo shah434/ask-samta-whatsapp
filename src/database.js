@@ -34,6 +34,25 @@ async function writeUserToKV(phone, user, env) {
   }
 }
 
+// Merge fields into KV only — no Supabase write.
+// Use for temporary flags (e.g. pending_strictness_ask) where speed matters
+// and the Supabase write can be deferred to ctx.waitUntil.
+async function mergeUserKVOnly(phone, fields, env) {
+  try {
+    const cached = await env.KV.get(`${KV_USER_PREFIX}${phone}`);
+    if (cached) {
+      const user = JSON.parse(cached);
+      await env.KV.put(
+        `${KV_USER_PREFIX}${phone}`,
+        JSON.stringify({ ...user, ...fields }),
+        { expirationTtl: KV_USER_TTL }
+      );
+    }
+  } catch (err) {
+    console.log(`[cache] kv_merge_error phone=${phone} err=${err.message}`);
+  }
+}
+
 // ── Public functions ────────────────────────────────────────────────────────
 
 export async function getUser(phone, env) {
@@ -106,6 +125,10 @@ export async function deleteUser(phone, env) {
   }
 
   console.log(`[db] user_deleted phone=${phone}`);
+}
+
+export async function setFlagKV(phone, fields, env) {
+  return mergeUserKVOnly(phone, fields, env);
 }
 
 export async function updateUser(phone, fields, env) {
