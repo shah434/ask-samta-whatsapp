@@ -70,4 +70,22 @@ export async function getImageAsBase64(imageId, mimeType, env) {
     `https://graph.facebook.com/v18.0/${imageId}`,
     { headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}` } }
   );
-  const mediaData = await mediaRes.j
+  const mediaData = await mediaRes.json();
+
+  const imgRes = await fetch(mediaData.url, {
+    headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}` }
+  });
+
+  const imgBuffer = await imgRes.arrayBuffer();
+  const bytes = new Uint8Array(imgBuffer);
+  let binary = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  return {
+    base64: btoa(binary),
+    mimeType: mimeType || 'image/jpeg'
+  };
+}

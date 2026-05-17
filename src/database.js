@@ -52,4 +52,90 @@ export async function getUser(phone, env) {
     {
       headers: {
         apikey: env.SUPABASE_KEY,
-        Author
+        Authorization: `Bearer ${env.SUPABASE_KEY}`
+      }
+    }
+  );
+  const data = await res.json();
+  console.log(`[cache] supabase_getUser=${Date.now() - t}ms`);
+
+  const user = data[0] || null;
+  if (user) await writeUserToKV(phone, user, env);
+  return user;
+}
+
+export async function createUser(phone, fields, env) {
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/users`,
+    {
+      method: 'POST',
+      headers: {
+        apikey: env.SUPABASE_KEY,
+        Authorization: `Bearer ${env.SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation'
+      },
+      body: JSON.stringify({ phone_number: phone, ...fields })
+    }
+  );
+  const data = await res.json();
+  const user = data[0];
+  // Cache the new user immediately so their second message is a KV hit
+  if (user) await writeUserToKV(phone, user, env);
+  return user;
+}
+
+export async function deleteUser(phone, env) {
+  // 1. Supabase first — hard delete the row
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/users?phone_number=eq.${phone}`,
+    {
+      method: 'DELETE',
+      headers: {
+        apikey: env.SUPABASE_KEY,
+        Authorization: `Bearer ${env.SUPABASE_KEY}`
+      }
+    }
+  );
+
+  // 2. Clear KV cache entry
+  try {
+    await env.KV.delete(`${KV_USER_PREFIX}${phone}`);
+  } catch (err) {
+    console.log(`[cache] kv_delete_error phone=${phone} err=${err.message}`);
+  }
+
+  console.log(`[db] user_deleted phone=${phone}`);
+}
+
+export async function updateUser(phone, fields, env) {
+  // 1. Supabase first — source of truth
+  await fetch(
+    `${env.SUPABASE_URL}/rest/v1/users?phone_number=eq.${phone}`,
+    {
+      method: 'PATCH',
+      headers: {
+        apikey: env.SUPABASE_KEY,
+        Authorization: `Bearer ${env.SUPABASE_KEY}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(fields)
+    }
+  );
+
+  // 2. Merge fields into KV cache (best effort — non-fatal on failure)
+  // Only updates an existing entry; does not create one if absent.
+  try {
+    const cached = await env.KV.get(`${KV_USER_PREFIX}${phone}`);
+    if (cached) {
+      const user = JSON.parse(cached);
+      await env.KV.put(
+        `${KV_USER_PREFIX}${phone}`,
+        JSON.stringify({ ...user, ...fields }),
+        { expirationTtl: KV_USER_TTL }
+      );
+    }
+  } catch (err) {
+    console.log(`[cache] kv_update_error phone=${phone} err=${err.message}`);
+  }
+}
