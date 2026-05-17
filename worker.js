@@ -241,22 +241,19 @@ export default {
         }
 
         // -- Strictness ask detection ---------------------------------------------
-        // Keep this updateUser synchronous: if the user replies before our deferred
-        // writes land, the next webhook needs to see pending_strictness_ask = true.
-        if (response.includes('[ASK_STRICTNESS]') && !user.strictness && !updates.strictness) {
-          cleanResponse = cleanResponse.replace(/\[ASK_STRICTNESS\]/gi, '').trim();
+        // Strip the tag regardless. Then always append the strictness question
+        // and help hint if strictness is still unset — don't rely solely on
+        // Claude emitting [ASK_STRICTNESS], which it skips for clear-cut answers.
+        // Keep updateUser synchronous: next webhook must see pending_strictness_ask=true
+        // in case the user replies before deferred writes land.
+        cleanResponse = cleanResponse.replace(/\[ASK_STRICTNESS\]/gi, '').trim();
+        if (!user.strictness && !updates.strictness) {
           cleanResponse += '\n\n' + getStrictnessQuestion();
+          cleanResponse += '\n\n💡 Type *help* anytime to see what else I can do.';
           await updateUser(phone, { pending_strictness_ask: true }, env);
-        } else {
-          cleanResponse = cleanResponse.replace(/\[ASK_STRICTNESS\]/gi, '').trim();
         }
 
         // -- Send response --------------------------------------------------------
-        // For users who haven't set strictness yet, append a one-time hint
-        // so they know help is available.
-        if (!user.strictness) {
-          cleanResponse += '\n\n💡 Type *help* anytime to see what else I can do.';
-        }
         await sendMessage(phone, cleanResponse, env);
         console.log(`[perf] sent=${Date.now() - t0}ms TOTAL`);
 
