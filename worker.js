@@ -10,8 +10,14 @@
 //     deferred via ctx.waitUntil — user doesn't wait, no race condition
 // ============================================
 
-import { getUser, createUser, updateUser } from './src/database.js';
-import { sendMessage, sendReaction, getImageAsBase64 } from './src/whatsapp.js';
+import { getUser, createUser, updateUser, deleteUser } from './src/database.js';
+import { sendMessage, sendReaction, sendImage, getImageAsBase64 } from './src/whatsapp.js';
+
+const VIN_FAMILY_URL = 'https://raw.githubusercontent.com/shah434/whatsapp-religious-friend/ad4ff7ebb697e22a7ba7abac1e0c94e4c7af3987/vin%20family.png';
+const VIN_GOODBYE_URL = 'https://raw.githubusercontent.com/shah434/whatsapp-religious-friend/ad4ff7ebb697e22a7ba7abac1e0c94e4c7af3987/vin%20goodbye.png';
+const VIN_STAY_URL = 'https://raw.githubusercontent.com/shah434/whatsapp-religious-friend/403944f9447d7975e07322f8cdaca25030dc50b0/vin%20stay.png';
+const KV_PENDING_DELETE_PREFIX = 'pending_delete:';
+const PENDING_DELETE_TTL = 600; // 10 minutes
 import { callClaude } from './src/claude.js';
 import { searchRestaurants, detectLocation } from './src/location.js';
 import { parseProfileUpdate, stripTags, buildSystemPrompt, classifyQuery } from './src/utils.js';
@@ -113,6 +119,27 @@ export default {
           return new Response('OK', { status: 200 });
         }
 
+        // -- Pending delete confirmation check ------------------------------------
+        const pendingDeleteKey = `${KV_PENDING_DELETE_PREFIX}${phone}`;
+        const pendingDelete = await env.KV.get(pendingDeleteKey);
+        if (pendingDelete && messageType === 'text') {
+          await env.KV.delete(pendingDeleteKey);
+          if (text.trim().toUpperCase() === 'YES') {
+            await deleteUser(phone, env);
+            await sendImage(phone, VIN_GOODBYE_URL, "You've been removed from the family. Take care. 🙏", env);
+          } else {
+            await sendImage(phone, VIN_STAY_URL, "Deletion cancelled — you're still family. 🙏", env);
+          }
+          return new Response('OK', { status: 200 });
+        }
+
+        // -- "delete me" keyword --------------------------------------------------
+        if (messageType === 'text' && text.trim().toLowerCase() === 'delete me') {
+          await env.KV.put(pendingDeleteKey, '1', { expirationTtl: PENDING_DELETE_TTL });
+          await sendImage(phone, VIN_FAMILY_URL, 'Are you sure you want to leave the family? Reply YES to confirm, or anything else to cancel.', env);
+          return new Response('OK', { status: 200 });
+        }
+
         // -- Pending strictness reply check ---------------------------------------
         if (user.pending_strictness_ask && messageType === 'text') {
           const handled = await applyStrictnessReply(phone, text, env);
@@ -209,50 +236,4 @@ export default {
         }
 
         // -- Strictness ask detection ---------------------------------------------
-        // Keep this updateUser synchronous: if the user replies before our deferred
-        // writes land, the next webhook needs to see pending_strictness_ask = true.
-        if (response.includes('[ASK_STRICTNESS]') && !user.strictness && !updates.strictness) {
-          cleanResponse = cleanResponse.replace(/\[ASK_STRICTNESS\]/gi, '').trim();
-          cleanResponse += '\n\n' + getStrictnessQuestion();
-          await updateUser(phone, { pending_strictness_ask: true }, env);
-        } else {
-          cleanResponse = cleanResponse.replace(/\[ASK_STRICTNESS\]/gi, '').trim();
-        }
-
-        // -- Send response --------------------------------------------------------
-        await sendMessage(phone, cleanResponse, env);
-        console.log(`[perf] sent=${Date.now() - t0}ms TOTAL`);
-        // Single combined write: history + message count in one Supabase PATCH,
-        // then KV cache updated with merged result. Runs after 200 is returned —
-        // user doesn't wait, and no race condition since it's one sequential write.
-        ctx.waitUntil((async () => {
-          await updateUser(phone, {
-            history_1_q: text,
-            history_1_a: cleanResponse,
-            history_2_q: user.history_1_q || '',
-            history_2_a: user.history_1_a || '',
-            history_3_q: user.history_2_q || '',
-            history_3_a: user.history_2_a || '',
-            message_count: (user.message_count || 0) + 1,
-          }, env);
-        })());
-
-        return new Response('OK', { status: 200 });
-
-      } catch (err) {
-        console.log('Main handler error:', err.message, err.stack);
-        // Surface errors to the user who triggered them — remove after debugging
-        try {
-          const debugBody = await req.clone().json();
-          const debugPhone = debugBody?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from;
-          if (debugPhone) {
-            await sendMessage(debugPhone, `⚠️ Error: ${err.message}\n${(err.stack || '').slice(0, 500)}`, env);
-          }
-        } catch {}
-        return new Response('OK', { status: 200 });
-      }
-    }
-
-    return new Response('Method not allowed', { status: 405 });
-  }
-};
+        // Keep this updateUser synchronous: if the user
