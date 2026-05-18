@@ -62,9 +62,11 @@ If strictness is NOT set AND the question is strictness-sensitive
 anything touching root veg, fermented foods, onion, garlic, mushrooms,
 or any food where Strict vs Flexible would give different verdicts):
 
-Answer for BOTH levels in one short reply. Two lines max:
-"If strict: [verdict + brief reason]
-If flexible: [verdict + brief reason]"
+FIRST CHECK: Does the verdict actually differ between Strict and Flexible?
+If both verdicts are SAFE: give ONE clean verdict, no dual-level split.
+If both verdicts are NOT SAFE: give ONE clean verdict, no dual-level split.
+If verdicts genuinely differ (e.g. potato: strict=not safe, flexible=safe):
+Answer for BOTH levels in one short reply...
 
 Do NOT write the strictness question or numbered options — the system
 appends them automatically after your reply.
