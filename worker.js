@@ -253,7 +253,6 @@ const needsStrictnessAsk = !user.strictness && !updates.strictness
   && isStrictnessSensitive
   && !isLikelyGreeting;
         
-        const needsStrictnessAsk = !user.strictness && !updates.strictness;
         // Strictness-sensitive query types — these are the ones where Strict vs Flexible
         // gives a different verdict. Sunset/calendar/greeting don't need strictness.
         const STRICTNESS_SENSITIVE = new Set([
