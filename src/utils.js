@@ -67,8 +67,15 @@ export function stripTags(text) {
 
 export function buildSystemPrompt(user, googleResults, calendarData, sunData, queryTypes) {
   const rules = user.community === 'baps' ? RULES_BAPS : RULES_JAIN;
-  const today = new Date().toDateString();
   const sun = sunData ? `\n${sunData}` : '';
+  const userTz = user.timezone || 'America/New_York';
+  const today = new Date().toLocaleDateString('en-US', {
+    timeZone: userTz,
+    weekday: 'short',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric'
+  });
 
   // Assemble only the relevant use case blocks. queryTypes is an array;
   // fall back to general if missing or empty.
