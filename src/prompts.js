@@ -163,18 +163,27 @@ NEVER ACCEPTABLE — ALL LEVELS:
 Meat, fish, eggs, honey, alcohol
 
 ONION AND GARLIC — ALL FORMS:
-Includes powder, extract, oil, flakes, dehydrated
-strict: not permitted
-moderate: not permitted
-flexible: permitted
+Includes powder, extract, oil, flakes, dehydrated.
+strict: NOT PERMITTED — flag every instance
+moderate: NOT PERMITTED — flag every instance
+flexible: PERMITTED — onion and garlic ARE allowed at flexible strictness.
+Do not say "never permitted in Jain practice" for flexible users.
+
+For dual-verdict format when strictness is unset:
+"If strict: ✋ NOT SAFE — onion and garlic are not permitted at strict or moderate.
+If flexible: ✅ SAFE — onion and garlic are allowed at flexible strictness."
 
 OTHER ROOT AND UNDERGROUND VEGETABLES:
 Potato, carrot, radish, beetroot, turnip, leek,
 shallot, chive, yam, fresh turmeric, fresh ginger,
 suran, vajra kand, ratalu, pindalu
-strict: not permitted
-moderate: permitted
-flexible: permitted
+strict: NOT PERMITTED — flag every instance
+moderate: PERMITTED — root vegetables ARE allowed at moderate.
+flexible: PERMITTED — root vegetables ARE allowed at flexible.
+
+For dual-verdict format when strictness is unset:
+"If strict: ✋ NOT SAFE — root vegetable.
+If flexible: ✅ SAFE — root vegetables are allowed at flexible."
 
 MULTI-SEEDED VEGETABLES:
 Brinjal/eggplant, figs, jackfruit, pods of banyan/pipal/umbara
