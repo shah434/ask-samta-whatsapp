@@ -1,11 +1,14 @@
-// Samta v2.2
+// Samta v2.3
 // ============================================
 // worker.js — Main Cloudflare Worker handler
 // ============================================
-// v2.2 changes from v2.1:
-//   - classifyQuery moved up so calendar formatter can use queryTypes
-//   - Calendar limit reduced to 3 events for most queries (10 for fasting/planning)
-//   - Greeting interceptor for "hi" / "hello" → shows welcome
+// v2.3 changes from v2.2:
+//   - isTithiQuery tightened — "I want to fast today" no longer triggers
+//     the tithi-city ask flow
+//   - Pending tithi-city reply now synthesizes the user's original question
+//     so the bot doesn't lose conversational thread after the city is set
+//   - Dual-verdict detection — strictness ask only fires when Claude
+//     actually gave a dual-level (If strict / If flexible) response
 // ============================================
 
 import { getUser, createUser, updateUser, deleteUser, setFlagKV } from './src/database.js';
@@ -45,28 +48,25 @@ const STRICTNESS_SENSITIVE = new Set([
 // Helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-// Detects whether a user message is asking about tithi / fast day status.
+// Detects tithi/calendar queries. Tightened in v2.3 — no longer matches
+// generic "I want to fast today" since that's a fasting setup query, not
+// a tithi lookup.
 function isTithiQuery(text) {
   const lower = (text || '').toLowerCase();
-  // Match tithi-specific queries — not generic "fast" mentions
   return /\btithi\b/.test(lower)
     || /\bfast day\b/.test(lower)
     || /\b(is today|today.*(special|tithi)|what.*tithi)\b/.test(lower);
 }
 
-// Detects greetings — used to skip strictness asks on small talk.
 function isLikelyGreeting(text) {
   return /^(hi|hello|hey|jai jinendra|namaste|hola)\b/i.test((text || '').trim());
 }
 
-// Detects bare greetings (just "hi" / "hello") — these get the welcome.
-// Doesn't match "hi can you tell me about paneer".
 function isBareGreeting(text) {
   return /^(hi|hello|hey|hola|namaste|jai jinendra)\b\s*[!.?]?$/i.test((text || '').trim());
 }
 
 // Rough timezone guess from WhatsApp phone country code.
-// Used as a starting point; overridden when user provides a city.
 function defaultTimezoneFromPhone(phone) {
   if (phone.startsWith('91')) return 'Asia/Kolkata';
   if (phone.startsWith('44')) return 'Europe/London';
@@ -75,7 +75,6 @@ function defaultTimezoneFromPhone(phone) {
   if (phone.startsWith('61')) return 'Australia/Sydney';
   if (phone.startsWith('254')) return 'Africa/Nairobi';
   if (phone.startsWith('27')) return 'Africa/Johannesburg';
-  // Default for +1 (US/Canada) and unknowns — ET is YJA's publication tz
   return 'America/New_York';
 }
 
@@ -116,7 +115,6 @@ export default {
     try {
       const body = await req.json();
 
-      // -- Drop status updates immediately -----------------------------------
       const statuses = body?.entry?.[0]?.changes?.[0]?.value?.statuses;
       if (statuses) return new Response('OK', { status: 200 });
 
@@ -127,12 +125,10 @@ export default {
       const messageId = message.id;
       const messageType = message.type;
 
-      // -- Silently drop non-content webhook events --------------------------
       if (SILENT_DROP_TYPES.has(messageType)) {
         return new Response('OK', { status: 200 });
       }
 
-      // -- Reject unsupported media ------------------------------------------
       if (!['text', 'image'].includes(messageType)) {
         await sendMessage(
           phone,
@@ -142,10 +138,9 @@ export default {
         return new Response('OK', { status: 200 });
       }
 
-      const text = message.text?.body || message.image?.caption || '';
+      let text = message.text?.body || message.image?.caption || '';
       const t0 = Date.now();
 
-      // For images, fire an immediate acknowledgment (not awaited)
       if (messageType === 'image') {
         sendMessage(phone, 'Reviewing your request... 🔍', env);
       }
@@ -219,29 +214,42 @@ export default {
       }
 
       // -- Pending tithi-city reply check ------------------------------------
-if (user.pending_tithi_city_ask && messageType === 'text') {
-  const replyCity = text.trim();
-  if (replyCity.length >= 2 && replyCity.length <= 50) {
-    const sunInfo = await getSunriseSunset(replyCity);
-    if (sunInfo?.timezoneId) {
-      await updateUser(phone, {
-        city: sunInfo.city,
-        timezone: sunInfo.timezoneId,
-        pending_tithi_city_ask: false
-      }, env);
-      user.city = sunInfo.city;
-      user.timezone = sunInfo.timezoneId;
-      // The user's last question was about tithi/fasting. Synthesize that
-      // intent so the rest of the flow answers the original question
-      // instead of treating "Chicago" as a fresh start.
-      text = user.history_1_q && /tithi|fast|today|special/i.test(user.history_1_q)
-  ? user.history_1_q
-  : 'What tithi is it today?';
-    } else {
-      // ... unchanged
-    }
-  }
-}
+      // When the previous turn asked for a city, the user's reply is the city.
+      // Geocode it, save city + timezone, then SYNTHESIZE their original
+      // question so the rest of the flow answers what they actually asked —
+      // not "Chicago" as a fresh start.
+      if (user.pending_tithi_city_ask && messageType === 'text') {
+        const replyCity = text.trim();
+        if (replyCity.length >= 2 && replyCity.length <= 50) {
+          const sunInfo = await getSunriseSunset(replyCity);
+          if (sunInfo?.timezoneId) {
+            await updateUser(phone, {
+              city: sunInfo.city,
+              timezone: sunInfo.timezoneId,
+              pending_tithi_city_ask: false
+            }, env);
+            user.city = sunInfo.city;
+            user.timezone = sunInfo.timezoneId;
+            // Synthesize the original question. Pull from history if it looks
+            // tithi/fasting-related; otherwise default to a tithi check.
+            const lastQ = user.history_1_q || '';
+            text = /tithi|fast|today|special/i.test(lastQ)
+              ? lastQ
+              : 'What tithi is it today?';
+            // Fall through with synthesized text
+          } else {
+            await sendMessage(
+              phone,
+              `I couldn't find that city. Please type the full city name or your zip code.`,
+              env
+            );
+            return new Response('OK', { status: 200 });
+          }
+        } else {
+          await setFlagKV(phone, { pending_tithi_city_ask: false }, env);
+          user.pending_tithi_city_ask = false;
+        }
+      }
 
       // -- Tithi-city ask ----------------------------------------------------
       if (isTithiQuery(text) && !user.city && messageType === 'text' && !user.pending_tithi_city_ask) {
@@ -284,7 +292,6 @@ if (user.pending_tithi_city_ask && messageType === 'text') {
           }
           const sunInfo = await getSunriseSunset(city);
           sunData = formatSunDataForClaude(sunInfo);
-          // Persist the IANA timezone for future tithi/calendar queries
           if (sunInfo?.timezoneId && sunInfo.timezoneId !== user.timezone) {
             await updateUser(phone, { timezone: sunInfo.timezoneId }, env);
             user.timezone = sunInfo.timezoneId;
@@ -294,18 +301,19 @@ if (user.pending_tithi_city_ask && messageType === 'text') {
         }
       }
 
-// -- Classify query (must come before calendar formatting) -------------
-const queryTypes = classifyQuery(text, messageType === 'image');
+      // -- Classify query (must come before calendar formatting) -------------
+      const queryTypes = classifyQuery(text, messageType === 'image');
 
-// Short replies inherit context from the previous bot question.
-// Without this, "1" / "2" / a single fast name gets classified as 'general'
-// and triggers the strictness ask incorrectly.
-const lastBotReply = (user.history_1_a || '').toLowerCase();
-const isShortReply = text.trim().length < 20;
-const isReplyToFastMenu = isShortReply && /fast|upvas|ekasan|ayambil|chauvihar|tivihar|atthai|porsi|biyasan|navkarsi/i.test(lastBotReply);
-if (isReplyToFastMenu && !queryTypes.includes('fasting')) {
-  queryTypes.push('fasting');
-}
+      // Short replies inherit fasting context from the previous bot question.
+      // Without this, "1" / "ayambil" / similar short replies get classified
+      // as 'general' and trigger the strictness ask incorrectly.
+      const lastBotReply = (user.history_1_a || '').toLowerCase();
+      const isShortReply = text.trim().length < 20;
+      const isReplyToFastMenu = isShortReply && /fast|upvas|ekasan|ayambil|chauvihar|tivihar|atthai|porsi|biyasan|navkarsi/i.test(lastBotReply);
+      if (isReplyToFastMenu && !queryTypes.includes('fasting')) {
+        queryTypes.push('fasting');
+      }
+
       // -- Calendar — Jain only, with size scaled to query type --------------
       let calendarData = '';
       if (user.community === 'jain') {
@@ -365,24 +373,32 @@ if (isReplyToFastMenu && !queryTypes.includes('fasting')) {
           ...(updates.city && { city: updates.city })
         }, env);
       }
-// -- Strictness ask append ---------------------------------------------
+
+      // -- Strictness ask append ---------------------------------------------
+      // Only append the strictness ask if:
+      //   - User has no strictness set, AND
+      //   - The query is strictness-sensitive (not fasting, not greeting), AND
+      //   - Claude actually gave a dual-verdict response. If both Strict and
+      //     Flexible would give the same answer, the question wasn't really
+      //     strictness-sensitive for this particular food — skip the ask.
       cleanResponse = cleanResponse.replace(/\[ASK_STRICTNESS\]/gi, '').trim();
+
       const isFasting = queryTypes.includes('fasting');
       const isStrictnessSensitive = queryTypes.some(t => STRICTNESS_SENSITIVE.has(t));
-      // Skip the strictness ask if the response shows a unified verdict
-      // (didn't use "If strict:" / "If flexible:" dual format)
       const hasDualVerdict = /\bif strict\b/i.test(cleanResponse) && /\bif flexible\b/i.test(cleanResponse);
       const needsStrictnessAsk = !user.strictness
         && !updates.strictness
         && isStrictnessSensitive
         && !isFasting
         && !isLikelyGreeting(text)
-        && hasDualVerdict;  // ← new check
+        && hasDualVerdict;
+
       if (needsStrictnessAsk) {
         cleanResponse += '\n\n' + getStrictnessQuestion();
         cleanResponse += '\n\n💡 Type *help* anytime to see what else I can do.';
         await setFlagKV(phone, { pending_strictness_ask: true }, env);
       }
+
       // -- Send response -----------------------------------------------------
       await sendMessage(phone, cleanResponse, env);
       console.log(`[perf] sent=${Date.now() - t0}ms TOTAL`);
