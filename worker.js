@@ -197,6 +197,11 @@ export default {
         return new Response('OK', { status: 200 });
       }
 
+      // -- Greeting → show welcome ------------------------------------------
+if (messageType === 'text' && /^(hi|hello|hey|hola|namaste|jai jinendra)\b\s*[!.?]?$/i.test(text.trim())) {
+  await sendMessage(phone, getWelcomeMessage(), env);
+  return new Response('OK', { status: 200 });
+}
       // -- Pending strictness reply check ------------------------------------
       if (user.pending_strictness_ask && messageType === 'text') {
         const handled = await applyStrictnessReply(phone, text, env);
