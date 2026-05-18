@@ -17,7 +17,7 @@ export async function callClaude(messages, system, env) {
         },
         body: JSON.stringify({
           model: 'claude-haiku-4-5-20251001',
-          max_tokens: 400, // bot targets 3-line responses (~150 tokens typical); 400 is a safe ceiling
+          max_tokens: 250, // bot targets 3-line responses (~150 tokens typical); 400 is a safe ceiling
           system,
           messages
         })
