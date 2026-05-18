@@ -112,11 +112,12 @@ export default {
         console.log(`[perf] phase1_parallel=${Date.now() - t0}ms type=${messageType}`);
 
         // -- User lookup / auto-creation ------------------------------------------
-        const isNewUser = !user;
-        if (isNewUser) {
-          user = await createUser(phone, { community: DEFAULT_DIET }, env);
-          // Welcome is sent AFTER the food response — see below.
-        }
+      const isNewUser = !user;
+      if (isNewUser) {
+        user = await createUser(phone, { community: DEFAULT_DIET }, env);
+        await sendMessage(phone, getWelcomeMessage(), env);
+        return new Response('OK', { status: 200 });
+      }
 
         // -- Pending delete confirmation check ------------------------------------
         const pendingDeleteKey = `${KV_PENDING_DELETE_PREFIX}${phone}`;
