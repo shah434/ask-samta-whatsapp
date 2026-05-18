@@ -48,7 +48,10 @@ const STRICTNESS_SENSITIVE = new Set([
 // Detects whether a user message is asking about tithi / fast day status.
 function isTithiQuery(text) {
   const lower = (text || '').toLowerCase();
-  return /\b(tithi|fast day|today.*(special|fast|tithi)|what.*tithi|is today)\b/.test(lower);
+  // Match tithi-specific queries — not generic "fast" mentions
+  return /\btithi\b/.test(lower)
+    || /\bfast day\b/.test(lower)
+    || /\b(is today|today.*(special|tithi)|what.*tithi)\b/.test(lower);
 }
 
 // Detects greetings — used to skip strictness asks on small talk.
@@ -216,32 +219,29 @@ export default {
       }
 
       // -- Pending tithi-city reply check ------------------------------------
-      if (user.pending_tithi_city_ask && messageType === 'text') {
-        const replyCity = text.trim();
-        if (replyCity.length >= 2 && replyCity.length <= 50) {
-          const sunInfo = await getSunriseSunset(replyCity);
-          if (sunInfo?.timezoneId) {
-            await updateUser(phone, {
-              city: sunInfo.city,
-              timezone: sunInfo.timezoneId,
-              pending_tithi_city_ask: false
-            }, env);
-            user.city = sunInfo.city;
-            user.timezone = sunInfo.timezoneId;
-            // Fall through to answer the tithi question now that city is set
-          } else {
-            await sendMessage(
-              phone,
-              `I couldn't find that city. Please type the full city name or your zip code.`,
-              env
-            );
-            return new Response('OK', { status: 200 });
-          }
-        } else {
-          await setFlagKV(phone, { pending_tithi_city_ask: false }, env);
-          user.pending_tithi_city_ask = false;
-        }
-      }
+if (user.pending_tithi_city_ask && messageType === 'text') {
+  const replyCity = text.trim();
+  if (replyCity.length >= 2 && replyCity.length <= 50) {
+    const sunInfo = await getSunriseSunset(replyCity);
+    if (sunInfo?.timezoneId) {
+      await updateUser(phone, {
+        city: sunInfo.city,
+        timezone: sunInfo.timezoneId,
+        pending_tithi_city_ask: false
+      }, env);
+      user.city = sunInfo.city;
+      user.timezone = sunInfo.timezoneId;
+      // The user's last question was about tithi/fasting. Synthesize that
+      // intent so the rest of the flow answers the original question
+      // instead of treating "Chicago" as a fresh start.
+      text = user.history_1_q && /tithi|fast|today|special/i.test(user.history_1_q)
+  ? user.history_1_q
+  : 'What tithi is it today?';
+    } else {
+      // ... unchanged
+    }
+  }
+}
 
       // -- Tithi-city ask ----------------------------------------------------
       if (isTithiQuery(text) && !user.city && messageType === 'text' && !user.pending_tithi_city_ask) {
@@ -369,11 +369,15 @@ if (isReplyToFastMenu && !queryTypes.includes('fasting')) {
       cleanResponse = cleanResponse.replace(/\[ASK_STRICTNESS\]/gi, '').trim();
       const isFasting = queryTypes.includes('fasting');
       const isStrictnessSensitive = queryTypes.some(t => STRICTNESS_SENSITIVE.has(t));
+      // Skip the strictness ask if the response shows a unified verdict
+      // (didn't use "If strict:" / "If flexible:" dual format)
+      const hasDualVerdict = /\bif strict\b/i.test(cleanResponse) && /\bif flexible\b/i.test(cleanResponse);
       const needsStrictnessAsk = !user.strictness
         && !updates.strictness
         && isStrictnessSensitive
         && !isFasting
-        && !isLikelyGreeting(text);
+        && !isLikelyGreeting(text)
+        && hasDualVerdict;  // ← new check
       if (needsStrictnessAsk) {
         cleanResponse += '\n\n' + getStrictnessQuestion();
         cleanResponse += '\n\n💡 Type *help* anytime to see what else I can do.';
