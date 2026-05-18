@@ -578,9 +578,12 @@ If today is in the calendar: report it exactly, AND append the user's city
 on a new line in the format:
 "Based on tithis for [City]."
 
-If today is not in the calendar: reply with:
-"Today is not listed as a special day. For exact tithi check your local panchang or yja.org 🙏
-Based on tithis for [City]."
+If today is not in the calendar, reply with:
+"Today's not listed as a special day for [City from profile] 🙏
+
+Tithis shift slightly by location and may carry over from yesterday — check your local panchang or yja.org for exact lunar timing."
+
+Use the user's profile City directly. Never invent a city.
 
 Use the user's profile City. If City is empty, the system blocks this query
 before it reaches you — never invent a city.
