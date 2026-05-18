@@ -169,7 +169,7 @@ export default {
         // Calendar already fetched in Phase 1 — just format if user is Jain
         let calendarData = '';
         if (user.community === 'jain') {
-          calendarData = formatEventsForClaude(calendarEvents);
+            calendarData = formatEventsForClaude(calendarEvents, user.timezone);
         }
 
         // Fetch sunrise/sunset if query is about sun times
