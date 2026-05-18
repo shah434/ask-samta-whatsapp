@@ -42,8 +42,7 @@ export function classifyQuery(text, hasImage) {
   if (/\b(restaurant|restaurants|eat near|food near|where to eat|where can i eat|find jain|find baps)\b/.test(lower)) types.add('restaurant');
   if (/\b(substitute|substitution|alternative|alternatives|instead of|replace|swap)\b/.test(lower)) types.add('substitution');
   if (/\b(medicine|medication|supplement|capsule|tablet|drug|pill|pharma|prescription|vitamin)\b/.test(lower)) types.add('medicine');
-  if (/\b(fast|fasting|upvas|ekasana|ayambil|biyasana|chauvihar|tivihar|duvihar|navkarsi|paryushana|ekadashi|nirjala|jalahar|farari|nom|punam|chaturmas)\b/.test(lower)) types.add('fasting');
-  if (/\b(tithi|sunset|sunrise|calendar|today.*(safe|special|fast|tithi)|what.*day)\b/.test(lower)) types.add('calendar');
+if (/\b(fast|fasting|upvas|upavas|ekasan|ekasana|ayambil|ayambhil|biyasan|biyasana|chauvihar|tivihar|duvihar|navkarsi|porsi|porasi|sadh.porsi|purimuddh|avadhdh|chhath|attham|atthai|masakshaman|navapad|oli|varshitap|vardhaman|visasthanak|paryushana|ekadashi|nirjala|jalahar|farari|nom|punam|chaturmas)\b/.test(lower)) types.add('fasting');  if (/\b(tithi|sunset|sunrise|calendar|today.*(safe|special|fast|tithi)|what.*day)\b/.test(lower)) types.add('calendar');
 
   if (types.size === 0) types.add('general');
 
