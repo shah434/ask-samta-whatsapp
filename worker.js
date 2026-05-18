@@ -188,6 +188,10 @@ export default {
             }
             const sunInfo = await getSunriseSunset(city);
             sunData = formatSunDataForClaude(sunInfo);
+            if (sunInfo?.timezoneId && sunInfo.timezoneId !== user.timezone) {
+            await updateUser(phone, { timezone: sunInfo.timezoneId }, env);
+            user.timezone = sunInfo.timezoneId;
+          }
           } else {
             sunData = 'SUNSET QUERY: User asked about sunset but no city in message and none stored. Ask which city.';
           }
