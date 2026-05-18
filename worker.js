@@ -247,12 +247,24 @@ export default {
         // Keep updateUser synchronous: next webhook must see pending_strictness_ask=true
         // in case the user replies before deferred writes land.
         cleanResponse = cleanResponse.replace(/\[ASK_STRICTNESS\]/gi, '').trim();
+        
+        const isLikelyGreeting = /^(hi|hello|hey|jai jinendra|namaste|hola)\b/i.test(text.trim());
+const needsStrictnessAsk = !user.strictness && !updates.strictness
+  && isStrictnessSensitive
+  && !isLikelyGreeting;
+        
         const needsStrictnessAsk = !user.strictness && !updates.strictness;
+        // Strictness-sensitive query types — these are the ones where Strict vs Flexible
+        // gives a different verdict. Sunset/calendar/greeting don't need strictness.
+        const STRICTNESS_SENSITIVE = new Set([
+          'general', 'label_scan', 'restaurant', 'substitution', 'medicine', 'fasting'
+        ]);
+        const isStrictnessSensitive = queryTypes.some(t => STRICTNESS_SENSITIVE.has(t));
+        
+        const needsStrictnessAsk = !user.strictness && !updates.strictness && isStrictnessSensitive;
         if (needsStrictnessAsk) {
           cleanResponse += '\n\n' + getStrictnessQuestion();
           cleanResponse += '\n\n💡 Type *help* anytime to see what else I can do.';
-          // KV-only write (~5ms) so the next webhook sees the flag immediately.
-          // Supabase is updated in ctx.waitUntil below alongside history.
           await setFlagKV(phone, { pending_strictness_ask: true }, env);
         }
 
