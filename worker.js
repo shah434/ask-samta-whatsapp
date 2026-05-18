@@ -275,8 +275,10 @@ const needsCalendar = user.community === 'jain'
   && (isTithiQuery(text) || queryTypes.includes('fasting') || queryTypes.includes('calendar') || messageType === 'image');
 if (needsCalendar) {
   const events = await getCalendarCached(env);
-  calendarData = formatEventsForClaude(events, user.timezone);
-}
+// Fasting and tithi queries benefit from seeing upcoming events.
+// General food checks only need today's status — keep it tight.
+const calendarLimit = (queryTypes.includes('fasting') || queryTypes.includes('calendar') || /paryushana|coming|upcoming|next/i.test(text)) ? 10 : 3;
+calendarData = formatEventsForClaude(calendarEvents, user.timezone, calendarLimit);}
 
       // Sunset / sunrise
       let sunData = '';
