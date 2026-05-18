@@ -270,10 +270,13 @@ if (messageType === 'text' && /^(hi|hello|hey|hola|namaste|jai jinendra)\b\s*[!.
       }
 
       // Calendar — only formatted for Jain users; pass their timezone
-      let calendarData = '';
-      if (user.community === 'jain') {
-        calendarData = formatEventsForClaude(calendarEvents, user.timezone);
-      }
+     let calendarData = '';
+const needsCalendar = user.community === 'jain'
+  && (isTithiQuery(text) || queryTypes.includes('fasting') || queryTypes.includes('calendar') || messageType === 'image');
+if (needsCalendar) {
+  const events = await getCalendarCached(env);
+  calendarData = formatEventsForClaude(events, user.timezone);
+}
 
       // Sunset / sunrise
       let sunData = '';
