@@ -83,8 +83,25 @@ export function buildSystemPrompt(user, googleResults, calendarData, sunData, qu
   const useCases = types.map(t => USE_CASE_BLOCKS[t] || '').join('\n');
 
   // STATIC — cached by Anthropic (same for all users of same community + query type)
-  const staticContent = CORE_IDENTITY + rules + useCases;
+const staticContent = CORE_IDENTITY + rules + useCases;
+const dailyCachedContent = calendarData ? `\nJAIN CALENDAR — NEXT 30 DAYS:\n${calendarData}` : '';
 
+return [
+  {
+    type: 'text',
+    text: staticContent,
+    cache_control: { type: 'ephemeral' }  // 5-min cache, gets reused across users
+  },
+  {
+    type: 'text',
+    text: dailyCachedContent,
+    cache_control: { type: 'ephemeral' }  // second breakpoint — caches the calendar
+  },
+  {
+    type: 'text',
+    text: profile + history + restaurantData + sun  // only this is truly per-message
+  }
+];
   // DYNAMIC — changes every message, not cached
   const profile = `
   CURRENT USER PROFILE:
@@ -98,13 +115,13 @@ export function buildSystemPrompt(user, googleResults, calendarData, sunData, qu
   // Truncate Q/A history to cap dynamic token count. Long prior exchanges
   // (label scans, detailed fasting questions) can easily add 400–600 non-cached
   // tokens per request. 200 chars per field keeps context useful but bounded.
-  const trunc = (s, n = 200) => s && s.length > n ? s.slice(0, n) + '…' : (s || '');
-
-  const history = `
+const truncQ = (s) => s && s.length > 80 ? s.slice(0, 80) + '…' : (s || '');
+const truncA = (s) => s && s.length > 120 ? s.slice(0, 120) + '…' : (s || '');
+const history = user.history_1_q ? `
 CONVERSATION HISTORY (most recent last):
-Q1: ${trunc(user.history_3_q)} A1: ${trunc(user.history_3_a)}
-Q2: ${trunc(user.history_2_q)} A2: ${trunc(user.history_2_a)}
-Q3: ${trunc(user.history_1_q)} A3: ${trunc(user.history_1_a)}`;
+Q1: ${truncQ(user.history_3_q)} A1: ${truncA(user.history_3_a)}
+Q2: ${truncQ(user.history_2_q)} A2: ${truncA(user.history_2_a)}
+Q3: ${truncQ(user.history_1_q)} A3: ${truncA(user.history_1_a)}` : '';
 
   const restaurantData = googleResults && googleResults.length > 0
     ? `\nNEARBY RESTAURANT RESULTS: ${JSON.stringify(googleResults)}
