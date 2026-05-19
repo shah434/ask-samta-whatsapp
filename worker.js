@@ -150,11 +150,14 @@ export default {
         ? getImageAsBase64(message.image.id, message.image.mime_type, env)
         : null;
 
-      let user, calendarEvents;
-      [, user, calendarEvents] = await Promise.all([
+      const pendingDeleteKey = `${KV_PENDING_DELETE_PREFIX}${phone}`;
+
+      let user, calendarEvents, pendingDelete;
+      [, user, calendarEvents, pendingDelete] = await Promise.all([
         sendReaction(phone, messageId, env),
         getUser(phone, env),
         getCalendarCached(env),
+        env.KV.get(pendingDeleteKey),
       ]);
       console.log(`[perf] phase1_parallel=${Date.now() - t0}ms type=${messageType}`);
 
@@ -169,8 +172,6 @@ export default {
       }
 
       // -- Pending delete confirmation ---------------------------------------
-      const pendingDeleteKey = `${KV_PENDING_DELETE_PREFIX}${phone}`;
-      const pendingDelete = await env.KV.get(pendingDeleteKey);
       if (pendingDelete && messageType === 'text') {
         await env.KV.delete(pendingDeleteKey);
         if (text.trim().toUpperCase() === 'YES') {
