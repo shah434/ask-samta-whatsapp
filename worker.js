@@ -163,12 +163,20 @@ export default {
 
       // -- New user creation + welcome ---------------------------------------
       if (!user) {
+        const t_create = Date.now();
         user = await createUser(phone, {
           community: DEFAULT_DIET,
           timezone: defaultTimezoneFromPhone(phone)
         }, env);
+        console.log(`[perf] new_user_createUser=${Date.now() - t_create}ms cumulative=${Date.now() - t0}ms`);
+        const t_send = Date.now();
         await sendMessage(phone, getWelcomeMessage(), env);
-        return new Response('OK', { status: 200 });
+        console.log(`[perf] new_user_welcome_sent=${Date.now() - t_send}ms TOTAL_new_user=${Date.now() - t0}ms`);
+        // If their first message was an image, fall through and process it.
+        // For plain text (greeting, etc.) just return — the welcome is enough.
+        if (messageType !== 'image') {
+          return new Response('OK', { status: 200 });
+        }
       }
 
       // -- Pending delete confirmation ---------------------------------------
