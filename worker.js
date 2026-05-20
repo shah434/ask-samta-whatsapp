@@ -219,37 +219,76 @@ export default {
       // question so the rest of the flow answers what they actually asked —
       // not "Chicago" as a fresh start.
       if (user.pending_tithi_city_ask && messageType === 'text') {
-        const replyCity = text.trim();
-        if (replyCity.length >= 2 && replyCity.length <= 50) {
-          const sunInfo = await getSunriseSunset(replyCity);
-          if (sunInfo?.timezoneId) {
-            await updateUser(phone, {
-              city: sunInfo.city,
-              timezone: sunInfo.timezoneId,
-              pending_tithi_city_ask: false
-            }, env);
-            user.city = sunInfo.city;
-            user.timezone = sunInfo.timezoneId;
-            // Synthesize the original question. Pull from history if it looks
-            // tithi/fasting-related; otherwise default to a tithi check.
-            const lastQ = user.history_1_q || '';
-            text = /tithi|fast|today|special/i.test(lastQ)
-              ? lastQ
-              : 'What tithi is it today?';
-            // Fall through with synthesized text
-          } else {
-            await sendMessage(
-              phone,
-              `I couldn't find that city. Please type the full city name or your zip code.`,
-              env
-            );
-            return new Response('OK', { status: 200 });
-          }
-        } else {
-          await setFlagKV(phone, { pending_tithi_city_ask: false }, env);
-          user.pending_tithi_city_ask = false;
-        }
-      }
+  const replyCity = text.trim();
+
+  // Handle disambiguation reply: user picked 1/2/3/4 from a previous list
+  const numericPick = /^[1-4]$/.test(replyCity) ? parseInt(replyCity) : null;
+  if (numericPick && user.pending_city_choices) {
+    const choices = JSON.parse(user.pending_city_choices);
+    const picked = choices[numericPick - 1];
+    if (picked) {
+      const sunInfo = await getSunForPlace(picked);
+      await updateUser(phone, {
+        city: sunInfo.city,
+        timezone: sunInfo.timezoneId,
+        pending_tithi_city_ask: false,
+        pending_city_choices: null
+      }, env);
+      user.city = sunInfo.city;
+      user.timezone = sunInfo.timezoneId;
+      // fall through with synthesized text below
+      const lastQ = user.history_1_q || '';
+      text = /tithi|fast|today|special/i.test(lastQ)
+        ? lastQ
+        : 'What tithi is it today?';
+    }
+  } else if (replyCity.length >= 2 && replyCity.length <= 50) {
+    const geo = await geocodeCity(replyCity);
+
+    if (geo.status === 'not_found') {
+      await sendMessage(
+        phone,
+        `I couldn't find that city. Please type the full city name with state/country, or your zip code.`,
+        env
+      );
+      return new Response('OK', { status: 200 });
+    }
+
+    if (geo.status === 'ambiguous') {
+      const lines = geo.candidates.map((c, i) =>
+        `${i + 1} — ${c.name}${c.admin1 ? ', ' + c.admin1 : ''}, ${c.country}`
+      ).join('\n');
+      await updateUser(phone, {
+        pending_city_choices: JSON.stringify(geo.candidates)
+        // keep pending_tithi_city_ask = true so next numeric reply is captured
+      }, env);
+      await sendMessage(
+        phone,
+        `I found a few places called "${replyCity}". Which one?\n${lines}\n\nReply with the number.`,
+        env
+      );
+      return new Response('OK', { status: 200 });
+    }
+
+    // status === 'unique'
+    const sunInfo = await getSunForPlace(geo.place);
+    await updateUser(phone, {
+      city: sunInfo.city,
+      timezone: sunInfo.timezoneId,
+      pending_tithi_city_ask: false
+    }, env);
+    user.city = sunInfo.city;
+    user.timezone = sunInfo.timezoneId;
+    const lastQ = user.history_1_q || '';
+    text = /tithi|fast|today|special/i.test(lastQ)
+      ? lastQ
+      : 'What tithi is it today?';
+    // fall through
+  } else {
+    await setFlagKV(phone, { pending_tithi_city_ask: false }, env);
+    user.pending_tithi_city_ask = false;
+  }
+}
 
       // -- Tithi-city ask ----------------------------------------------------
       if (isTithiQuery(text) && !user.city && messageType === 'text' && !user.pending_tithi_city_ask) {
