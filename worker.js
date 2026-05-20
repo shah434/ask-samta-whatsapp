@@ -238,9 +238,15 @@ export default {
       user.timezone = sunInfo.timezoneId;
       // fall through with synthesized text below
       const lastQ = user.history_1_q || '';
-      text = /tithi|fast|today|special/i.test(lastQ)
-        ? lastQ
-        : 'What tithi is it today?';
+            if (/sunset|sunrise|sun\s*(set|rise)/i.test(lastQ)) {
+              text = lastQ;
+            } else if (/tithi|fast|today|special/i.test(lastQ)) {
+              text = lastQ;
+            } else {
+              // Genuinely don't know what they asked — default to a soft
+              // acknowledgment rather than guessing at tithi.
+              text = `Got it — saved your city as ${user.city}. What can I help you with?`;
+            }
     }
   } else if (replyCity.length >= 2 && replyCity.length <= 50) {
     const geo = await geocodeCity(replyCity);
@@ -280,9 +286,15 @@ export default {
     user.city = sunInfo.city;
     user.timezone = sunInfo.timezoneId;
     const lastQ = user.history_1_q || '';
-    text = /tithi|fast|today|special/i.test(lastQ)
-      ? lastQ
-      : 'What tithi is it today?';
+            if (/sunset|sunrise|sun\s*(set|rise)/i.test(lastQ)) {
+              text = lastQ;
+            } else if (/tithi|fast|today|special/i.test(lastQ)) {
+              text = lastQ;
+            } else {
+              // Genuinely don't know what they asked — default to a soft
+              // acknowledgment rather than guessing at tithi.
+              text = `Got it — saved your city as ${user.city}. What can I help you with?`;
+            }
     // fall through
   } else {
     await setFlagKV(phone, { pending_tithi_city_ask: false }, env);
