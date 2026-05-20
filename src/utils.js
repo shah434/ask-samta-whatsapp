@@ -19,6 +19,7 @@ import {
   USE_CASE_FASTING,
   USE_CASE_CALENDAR,
 } from './prompts.js';
+import { detectFastTerm } from './fasting-match.js';
 
 const USE_CASE_BLOCKS = {
   general: USE_CASE_GENERAL,
@@ -42,7 +43,16 @@ export function classifyQuery(text, hasImage) {
   if (/\b(restaurant|restaurants|eat near|food near|where to eat|where can i eat|find jain|find baps)\b/.test(lower)) types.add('restaurant');
   if (/\b(substitute|substitution|alternative|alternatives|instead of|replace|swap)\b/.test(lower)) types.add('substitution');
   if (/\b(medicine|medication|supplement|capsule|tablet|drug|pill|pharma|prescription|vitamin)\b/.test(lower)) types.add('medicine');
-if (/\b(fast|fasting|upvas|upavas|ekasan|ekasana|ayambil|ayambhil|biyasan|biyasana|chauvihar|tivihar|duvihar|navkarsi|porsi|porasi|sadh.porsi|purimuddh|avadhdh|chhath|attham|atthai|masakshaman|navapad|oli|varshitap|vardhaman|visasthanak|paryushana|ekadashi|nirjala|jalahar|farari|nom|punam|chaturmas)\b/.test(lower)) types.add('fasting');  if (/\b(tithi|sunset|sunrise|calendar|today.*(safe|special|fast|tithi)|what.*day)\b/.test(lower)) types.add('calendar');
+
+  // Fasting detection — two layers:
+  //   1. Literal regex for common English keywords and well-spelled fast names
+  //   2. Fuzzy match for transliteration variants (pachkhan / paccakkhana,
+  //      ayambhil, navakarsi, porsee, etc.) that the regex would miss
+  const englishFastHit = /\b(fast|fasting|paryushana|paryushan|ekadashi|nirjala|jalahar|farari|nom|punam|chaturmas|sadh.porsi|navapad|oli|varshitap|vardhaman|visasthanak)\b/.test(lower);
+  const fuzzyFastHit = detectFastTerm(text).matched;
+  if (englishFastHit || fuzzyFastHit) types.add('fasting');
+
+  if (/\b(tithi|sunset|sunrise|calendar|today.*(safe|special|fast|tithi)|what.*day)\b/.test(lower)) types.add('calendar');
 
   if (types.size === 0) types.add('general');
 
