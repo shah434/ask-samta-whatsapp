@@ -179,14 +179,29 @@ export default {
       ]);
       console.log(`[perf] phase1_parallel=${Date.now() - t0}ms type=${messageType}`);
 
-      // -- New user creation + welcome ---------------------------------------
+ // -- New user creation + welcome ---------------------------------------
+      // Send welcome immediately so it lands first in the chat, then fall
+      // through so the user's actual question still gets answered. Two
+      // exceptions: a bare greeting or "help" — those ARE the welcome
+      // request, so don't answer them twice.
       if (!user) {
         user = await createUser(phone, {
           community: DEFAULT_DIET,
           timezone: defaultTimezoneFromPhone(phone)
         }, env);
         await sendMessage(phone, getWelcomeMessage(), env);
-        return new Response('OK', { status: 200 });
+
+        const isJustGreeting = messageType === 'text' && (
+          isBareGreeting(text) || text.trim().toLowerCase() === 'help'
+        );
+        if (isJustGreeting || messageType === 'image') {
+          // Greeting → welcome IS the answer. Image from a brand-new user
+          // → we don't know enough about them to scan accurately, so the
+          // welcome is also the right first response. Subsequent messages
+          // will flow normally now that the user row exists.
+          return new Response('OK', { status: 200 });
+        }
+        // Fall through — they asked a real question, answer it too
       }
 
       // -- Pending delete confirmation ---------------------------------------
