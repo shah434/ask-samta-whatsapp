@@ -61,19 +61,6 @@ function isTithiQuery(text) {
 function isLikelyGreeting(text) {
   return /^(hi|hello|hey|jai jinendra|namaste|hola)\b/i.test((text || '').trim());
 }
-// Reconstruct the user's intent after a city-disambiguation detour.
-// We look at the last question they asked before the city prompt
-// interrupted, and rewrite it without the ambiguous city reference
-// (the resolved city is now stored on the user).
-function synthesizeOriginalQuestion(lastQ, savedCity) {
-  const q = (lastQ || '').toLowerCase();
-  if (/sunset/.test(q))     return 'what time is sunset?';
-  if (/sunrise/.test(q))    return 'what time is sunrise?';
-  if (/restaurant/.test(q)) return 'find restaurants near me';
-  if (/tithi|fast day|today.*special/.test(q)) return lastQ;
-  // Genuinely unclear — confirm the save and let the user re-ask
-  return `Got it — saved your city as ${savedCity}. What would you like to check?`;
-}
 
 function isBareGreeting(text) {
   return /^(hi|hello|hey|hola|namaste|jai jinendra)\b\s*[!.?]?$/i.test((text || '').trim());
@@ -254,6 +241,7 @@ export default {
               user.timezone = sunInfo.timezoneId;
               // Replay the original question verbatim
               text = user.history_1_q || '';
+              user._justResolvedCity = true;
               // fall through
             } else {
               await sendMessage(phone, `Sorry — I couldn't look up that city right now. Please try again in a moment.`, env);
@@ -340,11 +328,12 @@ export default {
         user.city = location;
       }
 
-      // Sunset / sunrise
-      // Sunset / sunrise
-      let sunData = '';
-      if (detectSunsetQuery(text)) {
-        const cityFromMessage = extractCityFromSunQuery(text);
+    // Sunset / sunrise
+        let sunData = '';
+        if (detectSunsetQuery(text)) {
+          // If we just resolved the city via disambiguation, ignore any
+          // city name in the (replayed) message — user.city is the truth.
+          const cityFromMessage = user._justResolvedCity ? null : extractCityFromSunQuery(text);
 
         // Case A: user named a NEW city in this message → geocode + maybe disambiguate
         if (cityFromMessage && cityFromMessage.length > 2 && !cityFromMessage.toLowerCase().includes('time')) {
