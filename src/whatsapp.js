@@ -3,6 +3,10 @@
 // ============================================
 
 export async function sendMessage(to, text, env) {
+  if (!text || !text.trim()) {
+    console.log(`[whatsapp] refused_empty_send to=${to}`);
+    return;
+  }
   await fetch(
     `https://graph.facebook.com/v18.0/${env.PHONE_NUMBER_ID}/messages`,
     {
