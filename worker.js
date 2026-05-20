@@ -23,7 +23,7 @@ import {
   applyStrictnessReply,
 } from './src/onboarding.js';
 import { getCalendarCached, getTodayAndUpcomingEvents, formatEventsForClaude } from './src/calendar.js';
-import { getSunriseSunset, formatSunDataForClaude, detectSunsetQuery, extractCityFromSunQuery } from './src/sunset.js';
+import { geocodeCity, getSunForPlace, getSunriseSunset, formatSunDataForClaude, detectSunsetQuery, extractCityFromSunQuery } from './src/sunset.js';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
