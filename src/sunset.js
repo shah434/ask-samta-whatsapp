@@ -2,8 +2,9 @@
 // sunset.js — Sunrise and sunset lookup
 // Uses Open-Meteo (free) + sunrise-sunset.org (free)
 // No API keys needed
-// v3 — geocoding split out so the worker can disambiguate
-//      when multiple cities share a name (e.g. "San Jose")
+// v4 — placeFromUser() lets the worker reconstruct a place object from
+//      saved user fields (lat/lng/timezone) instead of re-geocoding the
+//      formatted display string, which Open-Meteo struggles to match.
 // ============================================
 
 /**
@@ -54,24 +55,67 @@ export async function getSunForPlace(place) {
   try {
     const today = new Date().toISOString().split('T')[0];
     const sunUrl = `https://api.sunrise-sunset.org/json?lat=${place.latitude}&lng=${place.longitude}&date=${today}&formatted=0`;
+    console.log(`[sun] lookup name=${place.name} lat=${place.latitude} lng=${place.longitude} tz=${place.timezone}`);
+
     const sunRes = await fetch(sunUrl);
+    if (!sunRes.ok) {
+      console.log(`[sun] http_error status=${sunRes.status}`);
+      return null;
+    }
     const sunData = await sunRes.json();
 
-    if (sunData.status !== 'OK') return null;
+    if (sunData.status !== 'OK') {
+      console.log(`[sun] api_status_not_ok status=${sunData.status}`);
+      return null;
+    }
 
-    const displayCity = `${place.name}${place.admin1 ? ', ' + place.admin1 : ''}, ${place.country}`;
+    const sunrise = formatTime(sunData.results.sunrise, place.timezone);
+    const sunset = formatTime(sunData.results.sunset, place.timezone);
+    if (!sunrise || !sunset) {
+      console.log(`[sun] format_failed sunrise=${sunrise} sunset=${sunset} tz=${place.timezone}`);
+      return null;
+    }
+
+    // If admin1/country are missing (e.g. reconstructed from placeFromUser),
+    // assume the name already includes them (display string was saved).
+    const displayCity = place.admin1 || place.country
+      ? `${place.name}${place.admin1 ? ', ' + place.admin1 : ''}${place.country ? ', ' + place.country : ''}`
+      : place.name;
 
     return {
       city: displayCity,
-      sunrise: formatTime(sunData.results.sunrise, place.timezone),
-      sunset: formatTime(sunData.results.sunset, place.timezone),
+      sunrise,
+      sunset,
       timezoneId: place.timezone
     };
 
   } catch (err) {
-    console.log('getSunForPlace error:', err.message);
+    console.log(`[sun] exception: ${err.message}`);
     return null;
   }
+}
+
+/**
+ * Build a place object from saved user fields. Use when we resolved the
+ * city in a previous turn and just need to look up sun times again —
+ * avoids re-geocoding the formatted display string.
+ *
+ * Returns null if the user has no saved coordinates (e.g. old rows from
+ * before lat/lng were added to the schema). Callers should fall back to
+ * getSunriseSunset(user.city) in that case.
+ */
+export function placeFromUser(user) {
+  if (!user || user.latitude == null || user.longitude == null || !user.timezone) {
+    return null;
+  }
+  return {
+    name: user.city,
+    latitude: user.latitude,
+    longitude: user.longitude,
+    timezone: user.timezone,
+    admin1: null,    // display string already includes these
+    country: null
+  };
 }
 
 /**
