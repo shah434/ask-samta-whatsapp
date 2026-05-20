@@ -227,14 +227,11 @@ export default {
       }
 
 // -- Pending city reply check ------------------------------------------
-      // The previous turn asked the user for a city (for tithi, sunset, or
-      // any other path that needs one). Their current message is either:
-      //   1. A number picking from a disambiguation list we sent
-      //   2. A fresh city name we need to geocode
-      //   3. Something else — clear the pending flag and let normal flow run
-      //
-      // After saving the city, we synthesize the original question so the
-      // rest of the flow answers what they actually asked, not "Columbus".
+      // The previous turn asked the user for a city. Their current message
+      // is either a number picking from a disambiguation list, or a fresh
+      // city name to geocode. Once the city is resolved and saved, we
+      // REPLAY their original question (history_1_q) verbatim through the
+      // rest of the worker so it answers exactly what they asked.
       if (user.pending_tithi_city_ask && messageType === 'text') {
         const replyCity = text.trim();
 
@@ -255,8 +252,9 @@ export default {
               }, env);
               user.city = sunInfo.city;
               user.timezone = sunInfo.timezoneId;
-              text = synthesizeOriginalQuestion(user.history_1_q, user.city);
-              // fall through with synthesized text
+              // Replay the original question verbatim
+              text = user.history_1_q || '';
+              // fall through
             } else {
               await sendMessage(phone, `Sorry — I couldn't look up that city right now. Please try again in a moment.`, env);
               return new Response('OK', { status: 200 });
@@ -299,13 +297,22 @@ export default {
           }, env);
           user.city = sunInfo.city;
           user.timezone = sunInfo.timezoneId;
-          text = synthesizeOriginalQuestion(user.history_1_q, user.city);
-          // fall through with synthesized text
+          // Replay the original question verbatim
+          text = user.history_1_q || '';
+          // fall through
         }
-        // Path 3: too short/long, just clear and continue
+        // Path 3: junk input — clear and continue
         else {
           await setFlagKV(phone, { pending_tithi_city_ask: false }, env);
           user.pending_tithi_city_ask = false;
+        }
+
+        // After replay, guard against empty history_1_q (first-turn users
+        // somehow landed here). Better to acknowledge than to send the bot
+        // an empty string.
+        if (!text || !text.trim()) {
+          await sendMessage(phone, `Got it — saved your city as ${user.city}. What would you like to check? 🙏`, env);
+          return new Response('OK', { status: 200 });
         }
       }
 
