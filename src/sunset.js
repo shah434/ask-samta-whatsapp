@@ -2,53 +2,87 @@
 // sunset.js — Sunrise and sunset lookup
 // Uses Open-Meteo (free) + sunrise-sunset.org (free)
 // No API keys needed
-// v2
+// v3 — geocoding split out so the worker can disambiguate
+//      when multiple cities share a name (e.g. "San Jose")
 // ============================================
 
-export async function getSunriseSunset(city) {
+/**
+ * Geocode a city name and return one of three states:
+ *   { status: 'unique',     place: <placeObj> }
+ *   { status: 'ambiguous',  candidates: [<placeObj>, ...] }
+ *   { status: 'not_found' }
+ *
+ * placeObj has: name, latitude, longitude, timezone, admin1, country
+ */
+export async function geocodeCity(city) {
   try {
-    // Clean city name — remove state abbreviations and extra punctuation
     const cleanCity = city
-      .replace(/,\s*[A-Z]{2}$/i, '')  // Remove ", NY" style state codes
-      .replace(/,/g, ' ')              // Replace remaining commas with spaces
+      .replace(/,\s*[A-Z]{2}$/i, '')   // strip ", NY" style state codes
+      .replace(/,/g, ' ')
       .trim();
 
-    console.log('Looking up city:', cleanCity);
+    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cleanCity)}&count=5&language=en&format=json`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const results = data.results || [];
 
-    const geocodeUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cleanCity)}&count=1&language=en&format=json`;    
-    const geocodeRes = await fetch(geocodeUrl);
-    const geocodeData = await geocodeRes.json();
+    if (results.length === 0) return { status: 'not_found' };
 
-    if (!geocodeData.results || geocodeData.results.length === 0) {
-      return null;
+    // Prefer exact name matches so "San Jose" doesn't surface
+    // "San Jose del Cabo" or "San Joseph" alongside the real options.
+    const exact = results.filter(
+      r => r.name.toLowerCase() === cleanCity.toLowerCase()
+    );
+    const candidates = exact.length > 0 ? exact : results;
+
+    if (candidates.length === 1) {
+      return { status: 'unique', place: candidates[0] };
     }
+    return { status: 'ambiguous', candidates: candidates.slice(0, 4) };
 
-    const result = geocodeData.results[0];
-    const lat = result.latitude;
-    const lng = result.longitude;
-    const timezoneId = result.timezone;
-    const formattedCity = `${result.name}, ${result.country}`;
+  } catch (err) {
+    console.log('geocodeCity error:', err.message);
+    return { status: 'not_found' };
+  }
+}
 
-    // Step 2: Fetch sunrise/sunset (free, no key)
+/**
+ * Fetch sunrise/sunset for an already-resolved place object.
+ * Returns { city, sunrise, sunset, timezoneId } or null on failure.
+ */
+export async function getSunForPlace(place) {
+  try {
     const today = new Date().toISOString().split('T')[0];
-    const sunUrl = `https://api.sunrise-sunset.org/json?lat=${lat}&lng=${lng}&date=${today}&formatted=0`;
+    const sunUrl = `https://api.sunrise-sunset.org/json?lat=${place.latitude}&lng=${place.longitude}&date=${today}&formatted=0`;
     const sunRes = await fetch(sunUrl);
     const sunData = await sunRes.json();
 
-    if (sunData.status !== 'OK') {
-      return null;
-    }
+    if (sunData.status !== 'OK') return null;
 
-    // Step 3: Format times in local timezone
-    const sunrise = formatTime(sunData.results.sunrise, timezoneId);
-    const sunset = formatTime(sunData.results.sunset, timezoneId);
+    const displayCity = `${place.name}${place.admin1 ? ', ' + place.admin1 : ''}, ${place.country}`;
 
-    return { city: formattedCity, sunrise, sunset, timezoneId };
+    return {
+      city: displayCity,
+      sunrise: formatTime(sunData.results.sunrise, place.timezone),
+      sunset: formatTime(sunData.results.sunset, place.timezone),
+      timezoneId: place.timezone
+    };
 
   } catch (err) {
-    console.log('getSunriseSunset error:', err.message);
+    console.log('getSunForPlace error:', err.message);
     return null;
   }
+}
+
+/**
+ * Convenience wrapper used by the sunset path when the city is unambiguous.
+ * Returns null when the city is ambiguous or not found — callers that need
+ * disambiguation should use geocodeCity + getSunForPlace directly.
+ */
+export async function getSunriseSunset(city) {
+  const geo = await geocodeCity(city);
+  if (geo.status !== 'unique') return null;
+  return getSunForPlace(geo.place);
 }
 
 function formatTime(utcString, timezoneId) {
@@ -100,7 +134,6 @@ export function extractCityFromSunQuery(text) {
     .replace(/\bcurrently\b/gi, '')
     .trim();
 
-  // Must reference sunset or sunrise directly before location
   const patterns = [
     /(?:sunset|sunrise)\s+(?:in|for|at)\s+([a-zA-Z\s,]+?)(?:\?|$)/i,
     /(?:sunset|sunrise)\s+(?:in|for|at)\s+(\d{5})/i,
@@ -120,4 +153,4 @@ export function extractCityFromSunQuery(text) {
   }
 
   return null;
-} 
+}
