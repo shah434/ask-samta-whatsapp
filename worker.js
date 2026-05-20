@@ -315,27 +315,65 @@ export default {
       }
 
       // Sunset / sunrise
+      // Sunset / sunrise
       let sunData = '';
       if (detectSunsetQuery(text)) {
-        let city = extractCityFromSunQuery(text);
+        const cityFromMessage = extractCityFromSunQuery(text);
 
-        if (!city && user.city) {
-          city = user.city;
-        }
+        // Case A: user named a NEW city in this message → geocode + maybe disambiguate
+        if (cityFromMessage && cityFromMessage.length > 2 && !cityFromMessage.toLowerCase().includes('time')) {
+          const geo = await geocodeCity(cityFromMessage);
 
-        if (city) {
-          const cityFromMessage = extractCityFromSunQuery(text);
-          if (cityFromMessage && cityFromMessage.length > 2 && !cityFromMessage.toLowerCase().includes('time')) {
-            await updateUser(phone, { city: cityFromMessage }, env);
-            user.city = cityFromMessage;
+          if (geo.status === 'not_found') {
+            await sendMessage(
+              phone,
+              `I couldn't find "${cityFromMessage}". Please type the city name with state or country, or your zip code.`,
+              env
+            );
+            return new Response('OK', { status: 200 });
           }
-          const sunInfo = await getSunriseSunset(city);
+
+          if (geo.status === 'ambiguous') {
+            const lines = geo.candidates.map((c, i) =>
+              `${i + 1} — ${c.name}${c.admin1 ? ', ' + c.admin1 : ''}, ${c.country}`
+            ).join('\n');
+            await updateUser(phone, {
+              pending_city_choices: JSON.stringify(geo.candidates),
+              pending_tithi_city_ask: true  // reuse the same pending flag so the numeric reply lands in the existing handler
+            }, env);
+            await sendMessage(
+              phone,
+              `I found a few places called "${cityFromMessage}". Which one?\n\n${lines}\n\nReply with the number.`,
+              env
+            );
+            return new Response('OK', { status: 200 });
+          }
+
+          // status === 'unique' — save the resolved city + tz, then continue
+          const sunInfo = await getSunForPlace(geo.place);
+          if (sunInfo) {
+            await updateUser(phone, {
+              city: sunInfo.city,
+              timezone: sunInfo.timezoneId
+            }, env);
+            user.city = sunInfo.city;
+            user.timezone = sunInfo.timezoneId;
+            sunData = formatSunDataForClaude(sunInfo);
+          } else {
+            sunData = 'SUNSET QUERY: lookup failed. Apologize briefly and ask the user to try again.';
+          }
+        }
+        // Case B: no city in message → use the stored one (already resolved)
+        else if (user.city) {
+          const sunInfo = await getSunriseSunset(user.city);
           sunData = formatSunDataForClaude(sunInfo);
           if (sunInfo?.timezoneId && sunInfo.timezoneId !== user.timezone) {
             await updateUser(phone, { timezone: sunInfo.timezoneId }, env);
             user.timezone = sunInfo.timezoneId;
           }
-        } else {
+        }
+        // Case C: no city anywhere → ask
+        else {
           sunData = 'SUNSET QUERY: User asked about sunset but no city in message and none stored. Ask which city.';
         }
       }
