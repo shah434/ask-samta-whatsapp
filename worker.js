@@ -61,6 +61,19 @@ function isTithiQuery(text) {
 function isLikelyGreeting(text) {
   return /^(hi|hello|hey|jai jinendra|namaste|hola)\b/i.test((text || '').trim());
 }
+// Reconstruct the user's intent after a city-disambiguation detour.
+// We look at the last question they asked before the city prompt
+// interrupted, and rewrite it without the ambiguous city reference
+// (the resolved city is now stored on the user).
+function synthesizeOriginalQuestion(lastQ, savedCity) {
+  const q = (lastQ || '').toLowerCase();
+  if (/sunset/.test(q))     return 'what time is sunset?';
+  if (/sunrise/.test(q))    return 'what time is sunrise?';
+  if (/restaurant/.test(q)) return 'find restaurants near me';
+  if (/tithi|fast day|today.*special/.test(q)) return lastQ;
+  // Genuinely unclear — confirm the save and let the user re-ask
+  return `Got it — saved your city as ${savedCity}. What would you like to check?`;
+}
 
 function isBareGreeting(text) {
   return /^(hi|hello|hey|hola|namaste|jai jinendra)\b\s*[!.?]?$/i.test((text || '').trim());
@@ -213,94 +226,88 @@ export default {
         user = await getUser(phone, env);
       }
 
-      // -- Pending tithi-city reply check ------------------------------------
-      // When the previous turn asked for a city, the user's reply is the city.
-      // Geocode it, save city + timezone, then SYNTHESIZE their original
-      // question so the rest of the flow answers what they actually asked —
-      // not "Chicago" as a fresh start.
+// -- Pending city reply check ------------------------------------------
+      // The previous turn asked the user for a city (for tithi, sunset, or
+      // any other path that needs one). Their current message is either:
+      //   1. A number picking from a disambiguation list we sent
+      //   2. A fresh city name we need to geocode
+      //   3. Something else — clear the pending flag and let normal flow run
+      //
+      // After saving the city, we synthesize the original question so the
+      // rest of the flow answers what they actually asked, not "Columbus".
       if (user.pending_tithi_city_ask && messageType === 'text') {
-  const replyCity = text.trim();
+        const replyCity = text.trim();
 
-  // Handle disambiguation reply: user picked 1/2/3/4 from a previous list
-  const numericPick = /^[1-4]$/.test(replyCity) ? parseInt(replyCity) : null;
-  if (numericPick && user.pending_city_choices) {
-    const choices = JSON.parse(user.pending_city_choices);
-    const picked = choices[numericPick - 1];
-    if (picked) {
-      const sunInfo = await getSunForPlace(picked);
-      await updateUser(phone, {
-        city: sunInfo.city,
-        timezone: sunInfo.timezoneId,
-        pending_tithi_city_ask: false,
-        pending_city_choices: null
-      }, env);
-      user.city = sunInfo.city;
-      user.timezone = sunInfo.timezoneId;
-      // fall through with synthesized text below
-      const lastQ = user.history_1_q || '';
-            if (/sunset|sunrise|sun\s*(set|rise)/i.test(lastQ)) {
-              text = lastQ;
-            } else if (/tithi|fast|today|special/i.test(lastQ)) {
-              text = lastQ;
+        // Path 1: numeric pick from a previous disambiguation list
+        const numericPick = /^[1-4]$/.test(replyCity) ? parseInt(replyCity) : null;
+        if (numericPick && user.pending_city_choices) {
+          let choices = null;
+          try { choices = JSON.parse(user.pending_city_choices); } catch {}
+          const picked = choices && choices[numericPick - 1];
+          if (picked) {
+            const sunInfo = await getSunForPlace(picked);
+            if (sunInfo) {
+              await updateUser(phone, {
+                city: sunInfo.city,
+                timezone: sunInfo.timezoneId,
+                pending_tithi_city_ask: false,
+                pending_city_choices: null
+              }, env);
+              user.city = sunInfo.city;
+              user.timezone = sunInfo.timezoneId;
+              text = synthesizeOriginalQuestion(user.history_1_q, user.city);
+              // fall through with synthesized text
             } else {
-              // Genuinely don't know what they asked — default to a soft
-              // acknowledgment rather than guessing at tithi.
-              text = `Got it — saved your city as ${user.city}. What can I help you with?`;
+              await sendMessage(phone, `Sorry — I couldn't look up that city right now. Please try again in a moment.`, env);
+              return new Response('OK', { status: 200 });
             }
-    }
-  } else if (replyCity.length >= 2 && replyCity.length <= 50) {
-    const geo = await geocodeCity(replyCity);
+          } else {
+            await updateUser(phone, { pending_city_choices: null, pending_tithi_city_ask: false }, env);
+            await sendMessage(phone, `That number didn't match the list I sent. Please type your city name again 🙏`, env);
+            return new Response('OK', { status: 200 });
+          }
+        }
+        // Path 2: user typed a city name
+        else if (replyCity.length >= 2 && replyCity.length <= 50) {
+          const geo = await geocodeCity(replyCity);
 
-    if (geo.status === 'not_found') {
-      await sendMessage(
-        phone,
-        `I couldn't find that city. Please type the full city name with state/country, or your zip code.`,
-        env
-      );
-      return new Response('OK', { status: 200 });
-    }
+          if (geo.status === 'not_found') {
+            await sendMessage(phone, `I couldn't find that city. Please type the full city name with state or country, or your zip code.`, env);
+            return new Response('OK', { status: 200 });
+          }
 
-    if (geo.status === 'ambiguous') {
-      const lines = geo.candidates.map((c, i) =>
-        `${i + 1} — ${c.name}${c.admin1 ? ', ' + c.admin1 : ''}, ${c.country}`
-      ).join('\n');
-      await updateUser(phone, {
-        pending_city_choices: JSON.stringify(geo.candidates)
-        // keep pending_tithi_city_ask = true so next numeric reply is captured
-      }, env);
-      await sendMessage(
-        phone,
-        `I found a few places called "${replyCity}". Which one?\n${lines}\n\nReply with the number.`,
-        env
-      );
-      return new Response('OK', { status: 200 });
-    }
+          if (geo.status === 'ambiguous') {
+            const lines = geo.candidates.map((c, i) =>
+              `${i + 1} — ${c.name}${c.admin1 ? ', ' + c.admin1 : ''}, ${c.country}`
+            ).join('\n');
+            await updateUser(phone, { pending_city_choices: JSON.stringify(geo.candidates) }, env);
+            await sendMessage(phone, `I found a few places called "${replyCity}". Which one?\n\n${lines}\n\nReply with the number.`, env);
+            return new Response('OK', { status: 200 });
+          }
 
-    // status === 'unique'
-    const sunInfo = await getSunForPlace(geo.place);
-    await updateUser(phone, {
-      city: sunInfo.city,
-      timezone: sunInfo.timezoneId,
-      pending_tithi_city_ask: false
-    }, env);
-    user.city = sunInfo.city;
-    user.timezone = sunInfo.timezoneId;
-    const lastQ = user.history_1_q || '';
-            if (/sunset|sunrise|sun\s*(set|rise)/i.test(lastQ)) {
-              text = lastQ;
-            } else if (/tithi|fast|today|special/i.test(lastQ)) {
-              text = lastQ;
-            } else {
-              // Genuinely don't know what they asked — default to a soft
-              // acknowledgment rather than guessing at tithi.
-              text = `Got it — saved your city as ${user.city}. What can I help you with?`;
-            }
-    // fall through
-  } else {
-    await setFlagKV(phone, { pending_tithi_city_ask: false }, env);
-    user.pending_tithi_city_ask = false;
-  }
-}
+          // status === 'unique'
+          const sunInfo = await getSunForPlace(geo.place);
+          if (!sunInfo) {
+            await sendMessage(phone, `Sorry — I couldn't look up that city right now. Please try again in a moment.`, env);
+            return new Response('OK', { status: 200 });
+          }
+          await updateUser(phone, {
+            city: sunInfo.city,
+            timezone: sunInfo.timezoneId,
+            pending_tithi_city_ask: false,
+            pending_city_choices: null
+          }, env);
+          user.city = sunInfo.city;
+          user.timezone = sunInfo.timezoneId;
+          text = synthesizeOriginalQuestion(user.history_1_q, user.city);
+          // fall through with synthesized text
+        }
+        // Path 3: too short/long, just clear and continue
+        else {
+          await setFlagKV(phone, { pending_tithi_city_ask: false }, env);
+          user.pending_tithi_city_ask = false;
+        }
+      }
 
       // -- Tithi-city ask ----------------------------------------------------
       if (isTithiQuery(text) && !user.city && messageType === 'text' && !user.pending_tithi_city_ask) {
