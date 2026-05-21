@@ -1,14 +1,14 @@
-// Samta v2.3
+// Samta v2.5
 // ============================================
 // worker.js — Main Cloudflare Worker handler
 // ============================================
-// v2.3 changes from v2.2:
-//   - isTithiQuery tightened — "I want to fast today" no longer triggers
-//     the tithi-city ask flow
-//   - Pending tithi-city reply now synthesizes the user's original question
-//     so the bot doesn't lose conversational thread after the city is set
-//   - Dual-verdict detection — strictness ask only fires when Claude
-//     actually gave a dual-level (If strict / If flexible) response
+// v2.5 changes from v2.4:
+//   - Persist latitude/longitude alongside city/timezone whenever a city
+//     is resolved. Sunset Case B now reconstructs the place from saved
+//     fields instead of re-geocoding the formatted display string (which
+//     Open-Meteo struggles to match → caused "I couldn't retrieve sunset
+//     timing" apologies after disambiguation).
+//   - New user welcome no longer swallows the user's first real question.
 // ============================================
 
 import { getUser, createUser, updateUser, deleteUser, setFlagKV } from './src/database.js';
@@ -23,7 +23,15 @@ import {
   applyStrictnessReply,
 } from './src/onboarding.js';
 import { getCalendarCached, getTodayAndUpcomingEvents, formatEventsForClaude } from './src/calendar.js';
-import { getSunriseSunset, formatSunDataForClaude, detectSunsetQuery, extractCityFromSunQuery } from './src/sunset.js';
+import {
+  geocodeCity,
+  getSunForPlace,
+  getSunriseSunset,
+  placeFromUser,
+  formatSunDataForClaude,
+  detectSunsetQuery,
+  extractCityFromSunQuery
+} from './src/sunset.js';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -44,13 +52,21 @@ const STRICTNESS_SENSITIVE = new Set([
   'general', 'label_scan', 'restaurant', 'substitution', 'medicine'
 ]);
 
+// Tithi CLAIM patterns — only fire the guard on assertive statements
+// about today, not on the mere mention of the word "tithi".
+// "today is Beej" → claim. "want to check today's tithi?" → not a claim.
+const TITHI_CLAIM_PATTERNS = [
+  /\btoday\s+is\s+(a\s+)?(?:beej|bij|chaturdashi|chaumasi|paryushan(?:a)?|ekadashi|atthai|attham|chhath|punam|ashtami|nom|amavasya|purnima|fast day|tithi)\b/i,
+  /\b(?:it\s+is|it'?s)\s+(?:beej|bij|chaturdashi|chaumasi|paryushan(?:a)?|ekadashi|atthai|attham|chhath|punam|ashtami|nom|amavasya|purnima)\b/i,
+  /\bno food (?:should be eaten )?until tomorrow\b/i,
+  /\btoday\s+is\s+a\s+fast(?:ing)?\s+day\b/i,
+  /\(\s*(?:beej|bij|chaturdashi|chaumasi|paryushan(?:a)?|a fasting day)\s*\)/i,
+];
+
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────────────────────
 
-// Detects tithi/calendar queries. Tightened in v2.3 — no longer matches
-// generic "I want to fast today" since that's a fasting setup query, not
-// a tithi lookup.
 function isTithiQuery(text) {
   const lower = (text || '').toLowerCase();
   return /\btithi\b/.test(lower)
@@ -66,7 +82,6 @@ function isBareGreeting(text) {
   return /^(hi|hello|hey|hola|namaste|jai jinendra)\b\s*[!.?]?$/i.test((text || '').trim());
 }
 
-// Rough timezone guess from WhatsApp phone country code.
 function defaultTimezoneFromPhone(phone) {
   if (phone.startsWith('91')) return 'Asia/Kolkata';
   if (phone.startsWith('44')) return 'Europe/London';
@@ -78,12 +93,29 @@ function defaultTimezoneFromPhone(phone) {
   return 'America/New_York';
 }
 
+// Persist a fully-resolved place to both the DB and the in-memory user
+// object. Used by every code path that resolves a city — keeps lat/lng/tz
+// in sync so sunset Case B can reconstruct without re-geocoding.
+async function saveResolvedCity(phone, user, place, sunInfo, env, extraFields = {}) {
+  const fields = {
+    city: sunInfo.city,
+    timezone: sunInfo.timezoneId,
+    latitude: place.latitude,
+    longitude: place.longitude,
+    ...extraFields
+  };
+  await updateUser(phone, fields, env);
+  user.city = sunInfo.city;
+  user.timezone = sunInfo.timezoneId;
+  user.latitude = place.latitude;
+  user.longitude = place.longitude;
+}
+
 // ────────────────────────────────────────────────────────────────────────────
 // Worker
 // ────────────────────────────────────────────────────────────────────────────
 
 export default {
-  // Cron trigger: pre-warms calendar cache daily at midnight UTC
   async scheduled(event, env, ctx) {
     try {
       const events = await getTodayAndUpcomingEvents();
@@ -96,7 +128,6 @@ export default {
 
   async fetch(req, env, ctx) {
 
-    // -- Meta webhook verification --------------------------------------------
     if (req.method === 'GET') {
       const url = new URL(req.url);
       const mode = url.searchParams.get('hub.mode');
@@ -150,36 +181,37 @@ export default {
         ? getImageAsBase64(message.image.id, message.image.mime_type, env)
         : null;
 
-      const pendingDeleteKey = `${KV_PENDING_DELETE_PREFIX}${phone}`;
-
-      let user, calendarEvents, pendingDelete;
-      [, user, calendarEvents, pendingDelete] = await Promise.all([
+      let user, calendarEvents;
+      [, user, calendarEvents] = await Promise.all([
         sendReaction(phone, messageId, env),
         getUser(phone, env),
         getCalendarCached(env),
-        env.KV.get(pendingDeleteKey),
       ]);
       console.log(`[perf] phase1_parallel=${Date.now() - t0}ms type=${messageType}`);
 
       // -- New user creation + welcome ---------------------------------------
+      // Send welcome first, then fall through so the user's actual question
+      // still gets answered in the same turn. Only exception: bare greeting
+      // or "help" — the welcome IS the answer for those.
       if (!user) {
-        const t_create = Date.now();
         user = await createUser(phone, {
           community: DEFAULT_DIET,
           timezone: defaultTimezoneFromPhone(phone)
         }, env);
-        console.log(`[perf] new_user_createUser=${Date.now() - t_create}ms cumulative=${Date.now() - t0}ms`);
-        const t_send = Date.now();
         await sendMessage(phone, getWelcomeMessage(), env);
-        console.log(`[perf] new_user_welcome_sent=${Date.now() - t_send}ms TOTAL_new_user=${Date.now() - t0}ms`);
-        // If their first message was an image, fall through and process it.
-        // For plain text (greeting, etc.) just return — the welcome is enough.
-        if (messageType !== 'image') {
+
+        const isJustGreeting = messageType === 'text' && (
+          isBareGreeting(text) || text.trim().toLowerCase() === 'help'
+        );
+        if (isJustGreeting) {
           return new Response('OK', { status: 200 });
         }
+        // Fall through — answer the question too
       }
 
       // -- Pending delete confirmation ---------------------------------------
+      const pendingDeleteKey = `${KV_PENDING_DELETE_PREFIX}${phone}`;
+      const pendingDelete = await env.KV.get(pendingDeleteKey);
       if (pendingDelete && messageType === 'text') {
         await env.KV.delete(pendingDeleteKey);
         if (text.trim().toUpperCase() === 'YES') {
@@ -222,41 +254,85 @@ export default {
         user = await getUser(phone, env);
       }
 
-      // -- Pending tithi-city reply check ------------------------------------
-      // When the previous turn asked for a city, the user's reply is the city.
-      // Geocode it, save city + timezone, then SYNTHESIZE their original
-      // question so the rest of the flow answers what they actually asked —
-      // not "Chicago" as a fresh start.
+      // -- Pending city reply check ------------------------------------------
+      // The previous turn asked the user for a city (for tithi, sunset, or
+      // any other path needing one). Their reply is either a number picking
+      // from a disambiguation list, or a fresh city name to geocode.
+      //
+      // Once the city is resolved and saved, we REPLAY their original
+      // question (history_1_q) verbatim through the worker. The
+      // _justResolvedCity flag prevents downstream branches from
+      // re-extracting the (now-stale) city name from the replayed message.
       if (user.pending_tithi_city_ask && messageType === 'text') {
         const replyCity = text.trim();
-        if (replyCity.length >= 2 && replyCity.length <= 50) {
-          const sunInfo = await getSunriseSunset(replyCity);
-          if (sunInfo?.timezoneId) {
-            await updateUser(phone, {
-              city: sunInfo.city,
-              timezone: sunInfo.timezoneId,
-              pending_tithi_city_ask: false
-            }, env);
-            user.city = sunInfo.city;
-            user.timezone = sunInfo.timezoneId;
-            // Synthesize the original question. Pull from history if it looks
-            // tithi/fasting-related; otherwise default to a tithi check.
-            const lastQ = user.history_1_q || '';
-            text = /tithi|fast|today|special/i.test(lastQ)
-              ? lastQ
-              : 'What tithi is it today?';
-            // Fall through with synthesized text
+
+        // Path 1: numeric pick from a previous disambiguation list
+        const numericPick = /^[1-4]$/.test(replyCity) ? parseInt(replyCity) : null;
+        if (numericPick && user.pending_city_choices) {
+          let choices = null;
+          try { choices = JSON.parse(user.pending_city_choices); } catch {}
+          const picked = choices && choices[numericPick - 1];
+          if (picked) {
+            const sunInfo = await getSunForPlace(picked);
+            if (sunInfo) {
+              await saveResolvedCity(phone, user, picked, sunInfo, env, {
+                pending_tithi_city_ask: false,
+                pending_city_choices: null
+              });
+              user._justResolvedCity = true;
+              text = user.history_1_q || '';
+              // fall through with replayed text
+            } else {
+              await sendMessage(phone, `Sorry — I couldn't look up that city right now. Please try again in a moment.`, env);
+              return new Response('OK', { status: 200 });
+            }
           } else {
-            await sendMessage(
-              phone,
-              `I couldn't find that city. Please type the full city name or your zip code.`,
-              env
-            );
+            await updateUser(phone, { pending_city_choices: null, pending_tithi_city_ask: false }, env);
+            await sendMessage(phone, `That number didn't match the list I sent. Please type your city name again 🙏`, env);
             return new Response('OK', { status: 200 });
           }
-        } else {
+        }
+        // Path 2: user typed a city name
+        else if (replyCity.length >= 2 && replyCity.length <= 50) {
+          const geo = await geocodeCity(replyCity);
+
+          if (geo.status === 'not_found') {
+            await sendMessage(phone, `I couldn't find that city. Please type the full city name with state or country, or your zip code.`, env);
+            return new Response('OK', { status: 200 });
+          }
+
+          if (geo.status === 'ambiguous') {
+            const lines = geo.candidates.map((c, i) =>
+              `${i + 1} — ${c.name}${c.admin1 ? ', ' + c.admin1 : ''}, ${c.country}`
+            ).join('\n');
+            await updateUser(phone, { pending_city_choices: JSON.stringify(geo.candidates) }, env);
+            await sendMessage(phone, `I found a few places called "${replyCity}". Which one?\n\n${lines}\n\nReply with the number.`, env);
+            return new Response('OK', { status: 200 });
+          }
+
+          // status === 'unique'
+          const sunInfo = await getSunForPlace(geo.place);
+          if (!sunInfo) {
+            await sendMessage(phone, `Sorry — I couldn't look up that city right now. Please try again in a moment.`, env);
+            return new Response('OK', { status: 200 });
+          }
+          await saveResolvedCity(phone, user, geo.place, sunInfo, env, {
+            pending_tithi_city_ask: false,
+            pending_city_choices: null
+          });
+          user._justResolvedCity = true;
+          text = user.history_1_q || '';
+          // fall through with replayed text
+        }
+        // Path 3: junk input — clear and continue
+        else {
           await setFlagKV(phone, { pending_tithi_city_ask: false }, env);
           user.pending_tithi_city_ask = false;
+        }
+
+        if (user._justResolvedCity && (!text || !text.trim())) {
+          await sendMessage(phone, `Got it — saved your city as ${user.city}. What would you like to check? 🙏`, env);
+          return new Response('OK', { status: 200 });
         }
       }
 
@@ -271,51 +347,117 @@ export default {
         return new Response('OK', { status: 200 });
       }
 
-      // -- Enrichment: restaurant / sunset -----------------------------------
+      // -- Enrichment: restaurant --------------------------------------------
+      // If we just resolved a city via disambiguation, the replayed message
+      // may still contain the ambiguous city name — ignore it and use the
+      // saved user.city instead.
       let googleResults = [];
-      const location = detectLocation(text);
+      const location = user._justResolvedCity ? user.city : detectLocation(text);
 
       if (location && location !== 'unknown') {
         const communityQuery = user.community === 'baps'
           ? 'BAPS Swaminarayan friendly'
           : 'Jain friendly';
         googleResults = await searchRestaurants(communityQuery, location, env);
-        await updateUser(phone, { city: location }, env);
-        user.city = location;
+        if (!user._justResolvedCity) {
+          await updateUser(phone, { city: location }, env);
+          user.city = location;
+        }
       }
 
-      // Sunset / sunrise
+      // -- Sunset / sunrise --------------------------------------------------
+      // Three cases:
+      //   A. New city in this message — geocode, maybe disambiguate, save, lookup
+      //   B. No city in message — use saved coordinates (no re-geocoding)
+      //   C. No city anywhere — ask
+      // After a replay, ignore any city name in the (now-stale) message text.
       let sunData = '';
       if (detectSunsetQuery(text)) {
-        let city = extractCityFromSunQuery(text);
+        const cityFromMessage = user._justResolvedCity ? null : extractCityFromSunQuery(text);
 
-        if (!city && user.city) {
-          city = user.city;
+        // Case A: new city in message
+        if (cityFromMessage && cityFromMessage.length > 2 && !cityFromMessage.toLowerCase().includes('time')) {
+          const geo = await geocodeCity(cityFromMessage);
+
+          if (geo.status === 'not_found') {
+            await sendMessage(
+              phone,
+              `I couldn't find "${cityFromMessage}". Please type the city name with state or country, or your zip code.`,
+              env
+            );
+            return new Response('OK', { status: 200 });
+          }
+
+          if (geo.status === 'ambiguous') {
+            const lines = geo.candidates.map((c, i) =>
+              `${i + 1} — ${c.name}${c.admin1 ? ', ' + c.admin1 : ''}, ${c.country}`
+            ).join('\n');
+            // Save the original question so the disambiguation reply replays it
+            await updateUser(phone, {
+              pending_city_choices: JSON.stringify(geo.candidates),
+              pending_tithi_city_ask: true,
+              history_1_q: text
+            }, env);
+            await sendMessage(
+              phone,
+              `I found a few places called "${cityFromMessage}". Which one?\n\n${lines}\n\nReply with the number.`,
+              env
+            );
+            return new Response('OK', { status: 200 });
+          }
+
+          // status === 'unique' — save resolved place, then continue
+          const sunInfo = await getSunForPlace(geo.place);
+          if (sunInfo) {
+            await saveResolvedCity(phone, user, geo.place, sunInfo, env);
+            sunData = formatSunDataForClaude(sunInfo);
+          } else {
+            sunData = 'SUNSET QUERY: lookup failed. Apologize briefly and ask the user to try again.';
+          }
         }
+        // Case B: no city in message → use saved coordinates if we have them
+        else if (user.city) {
+          const place = placeFromUser(user);
+          let sunInfo = null;
+          if (place) {
+            sunInfo = await getSunForPlace(place);
+          } else {
+            // Old row without lat/lng — re-geocode once and persist for next time
+            const geo = await geocodeCity(user.city);
+            if (geo.status === 'unique') {
+              sunInfo = await getSunForPlace(geo.place);
+              if (sunInfo) {
+                await saveResolvedCity(phone, user, geo.place, sunInfo, env);
+              }
+            }
+          }
 
-        if (city) {
-          const cityFromMessage = extractCityFromSunQuery(text);
-          if (cityFromMessage && cityFromMessage.length > 2 && !cityFromMessage.toLowerCase().includes('time')) {
-            await updateUser(phone, { city: cityFromMessage }, env);
-            user.city = cityFromMessage;
+          if (sunInfo) {
+            sunData = formatSunDataForClaude(sunInfo);
+            if (sunInfo.timezoneId && sunInfo.timezoneId !== user.timezone) {
+              await updateUser(phone, { timezone: sunInfo.timezoneId }, env);
+              user.timezone = sunInfo.timezoneId;
+            }
+          } else {
+            sunData = 'SUNSET QUERY: lookup failed for stored city. Apologize briefly and ask the user to retry.';
           }
-          const sunInfo = await getSunriseSunset(city);
-          sunData = formatSunDataForClaude(sunInfo);
-          if (sunInfo?.timezoneId && sunInfo.timezoneId !== user.timezone) {
-            await updateUser(phone, { timezone: sunInfo.timezoneId }, env);
-            user.timezone = sunInfo.timezoneId;
-          }
-        } else {
+        }
+        // Case C: no city anywhere
+        else {
           sunData = 'SUNSET QUERY: User asked about sunset but no city in message and none stored. Ask which city.';
         }
       }
 
-      // -- Classify query (must come before calendar formatting) -------------
+      // -- Classify query ----------------------------------------------------
       const queryTypes = classifyQuery(text, messageType === 'image');
 
+      // Log short messages that classified as 'general' only — candidates
+      // for new fasting/pachkhan variants to add to src/fasting-match.js.
+      if (queryTypes.length === 1 && queryTypes[0] === 'general' && text && text.length < 30) {
+        console.log(`[unmatched-short] phone=${phone} text="${text}"`);
+      }
+
       // Short replies inherit fasting context from the previous bot question.
-      // Without this, "1" / "ayambil" / similar short replies get classified
-      // as 'general' and trigger the strictness ask incorrectly.
       const lastBotReply = (user.history_1_a || '').toLowerCase();
       const isShortReply = text.trim().length < 20;
       const isReplyToFastMenu = isShortReply && /fast|upvas|ekasan|ayambil|chauvihar|tivihar|atthai|porsi|biyasan|navkarsi/i.test(lastBotReply);
@@ -323,9 +465,10 @@ export default {
         queryTypes.push('fasting');
       }
 
-      // -- Calendar — Jain only, with size scaled to query type --------------
+      // -- Calendar — Jain only, gated on onboarding completion --------------
       let calendarData = '';
-      if (user.community === 'jain') {
+      const isOnboarded = !!user.strictness;
+      if (user.community === 'jain' && isOnboarded) {
         const needsFullCalendar = queryTypes.includes('fasting')
           || queryTypes.includes('calendar')
           || /paryushana|coming|upcoming|next/i.test(text);
@@ -375,21 +518,58 @@ export default {
       const updates = parseProfileUpdate(response);
       let cleanResponse = stripTags(response);
 
-      if (updates.strictness || updates.community || updates.city) {
+      // -- Tithi-claim guard (Bug 2) -----------------------------------------
+      const calendarHadToday = /TODAY_IS_TITHI:\s*true/i.test(calendarData);
+      const claimsTithiToday = TITHI_CLAIM_PATTERNS.some(p => p.test(cleanResponse));
+      if (!calendarHadToday && claimsTithiToday) {
+        console.log(`[guard] stripped_tithi_claim phone=${phone} response="${cleanResponse.slice(0, 200)}"`);
+        const sentences = cleanResponse.split(/(?<=[.!?])\s+/);
+        cleanResponse = sentences
+          .filter(s => !TITHI_CLAIM_PATTERNS.some(p => p.test(s)))
+          .join(' ')
+          .replace(/\s+/g, ' ')
+          .trim();
+        if (!cleanResponse) {
+          cleanResponse = "Let me know what you'd like to check 🙏";
+        }
+      }
+
+      // -- Profile updates from Claude ---------------------------------------
+      if (updates.strictness || updates.community) {
         await updateUser(phone, {
           ...(updates.strictness && { strictness: updates.strictness }),
-          ...(updates.community && { community: updates.community }),
-          ...(updates.city && { city: updates.city })
+          ...(updates.community && { community: updates.community })
         }, env);
       }
 
+      if (updates.city) {
+        const geo = await geocodeCity(updates.city);
+
+        if (geo.status === 'unique') {
+          const sunInfo = await getSunForPlace(geo.place);
+          if (sunInfo) {
+            await saveResolvedCity(phone, user, geo.place, sunInfo, env);
+          }
+        } else if (geo.status === 'ambiguous') {
+          const lines = geo.candidates.map((c, i) =>
+            `${i + 1} — ${c.name}${c.admin1 ? ', ' + c.admin1 : ''}, ${c.country}`
+          ).join('\n');
+          await updateUser(phone, {
+            pending_city_choices: JSON.stringify(geo.candidates),
+            pending_tithi_city_ask: true,
+            history_1_q: text
+          }, env);
+          await sendMessage(
+            phone,
+            `Before I save that — I found a few places called "${updates.city}". Which one?\n\n${lines}\n\nReply with the number.`,
+            env
+          );
+          return new Response('OK', { status: 200 });
+        }
+        // status === 'not_found' — silently skip the save
+      }
+
       // -- Strictness ask append ---------------------------------------------
-      // Only append the strictness ask if:
-      //   - User has no strictness set, AND
-      //   - The query is strictness-sensitive (not fasting, not greeting), AND
-      //   - Claude actually gave a dual-verdict response. If both Strict and
-      //     Flexible would give the same answer, the question wasn't really
-      //     strictness-sensitive for this particular food — skip the ask.
       cleanResponse = cleanResponse.replace(/\[ASK_STRICTNESS\]/gi, '').trim();
 
       const isFasting = queryTypes.includes('fasting');
@@ -409,6 +589,10 @@ export default {
       }
 
       // -- Send response -----------------------------------------------------
+      if (!cleanResponse || !cleanResponse.trim()) {
+        console.log(`[empty_response] phone=${phone} queryTypes=${queryTypes.join(',')} text="${text.slice(0, 80)}"`);
+        cleanResponse = "Let me know what you'd like to check 🙏";
+      }
       await sendMessage(phone, cleanResponse, env);
       console.log(`[perf] sent=${Date.now() - t0}ms TOTAL`);
 

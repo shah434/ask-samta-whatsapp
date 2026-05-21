@@ -126,21 +126,39 @@ function parseICSDate(dateStr) {
 }
 
 export function formatEventsForClaude(events, userTimezone, limit = 3) {
+  const tz = userTimezone || CALENDAR_TZ;
+
   if (!events || events.length === 0) {
-    return 'No upcoming Jain calendar events found in the next 30 days.';
+    return `TODAY_IS_TITHI: false
+UPCOMING (informational only, NOT today): none`;
   }
 
-  const tz = userTimezone || CALENDAR_TZ;
   const today = todayInTimezone(tz);
+  const todayStr = today.toDateString();
 
-  const sliced = events.slice(0, limit);
-  const lines = sliced.map(event => {
-    const isToday = event.date.toDateString() === today.toDateString();
-    const dateLabel = isToday
-      ? 'TODAY'
-      : event.date.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    return `${dateLabel}: ${event.summary}`;
-  });
+  // Find today's event (if any) and upcoming events (excluding today)
+  const todayEvent = events.find(e => e.date.toDateString() === todayStr);
+  const upcoming = events
+    .filter(e => e.date.toDateString() !== todayStr)
+    .slice(0, limit);
 
-  return lines.join('\n');
+  // Today line — explicit boolean so Claude can't misread
+  const todayLine = todayEvent
+    ? `TODAY_IS_TITHI: true
+TODAY_TITHI_NAME: ${todayEvent.summary}`
+    : `TODAY_IS_TITHI: false`;
+
+  // Upcoming line — labeled so Claude can't mistake a future event for today
+  const upcomingLines = upcoming.length
+    ? upcoming.map(event => {
+        const label = event.date.toLocaleDateString('en-US', {
+          weekday: 'short', month: 'short', day: 'numeric', timeZone: tz
+        });
+        return `${label}: ${event.summary}`;
+      }).join('\n')
+    : 'none';
+
+  return `${todayLine}
+UPCOMING (informational only, NOT today):
+${upcomingLines}`;
 }
