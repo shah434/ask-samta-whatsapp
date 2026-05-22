@@ -618,14 +618,12 @@ export default {
         const debugBody = await req.clone().json();
         const debugPhone = debugBody?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from;
         if (debugPhone) {
-          await sendMessage(
-            debugPhone,
-            `⚠️ Error: ${err.message}\n${(err.stack || '').slice(0, 500)}`,
-            env
-          );
+          const msg = env.DEBUG === 'true'
+            ? `⚠️ Error: ${err.message}\n${(err.stack || '').slice(0, 500)}`
+            : 'Something went wrong on my end — please try again in a moment 🙏';
+          await sendMessage(debugPhone, msg, env);
         }
       } catch {}
       return new Response('OK', { status: 200 });
     }
-  }
 };
