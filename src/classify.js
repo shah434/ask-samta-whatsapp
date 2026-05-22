@@ -3,7 +3,7 @@
 // ============================================
 // Turns a raw inbound message into ONE structured intent object.
 // After this runs, NOTHING downstream reads the raw message again.
-//
+// 
 //   classify(message, hasImage) -> intent
 //
 //   intent = {
