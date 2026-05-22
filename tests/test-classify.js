@@ -1,6 +1,6 @@
 // ============================================
 // test-classify.js — unit tests for the v3.1 classifier
-// Run: node test/test-classify.js
+// Run: node test/test-classify.js 
 // ============================================
 import { classify } from '../src/classify.js';
 
