@@ -1,25 +1,23 @@
 name: Deploy to Cloudflare Workers
-
 on:
   push:
     branches:
       - main
-
+    paths-ignore:
+      - 'test/**'
+      - '**.md'
 jobs:
   deploy:
     runs-on: ubuntu-latest
     name: Deploy
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '22'
-
       - name: Install Wrangler
         run: npm install -g wrangler@4
-
       - name: Deploy and set secrets
         run: |
           wrangler deploy
