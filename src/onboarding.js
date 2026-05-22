@@ -9,14 +9,14 @@ import { sendMessage } from './whatsapp.js';
 export const DEFAULT_DIET = 'jain';
 
 export function getWelcomeMessage() {
-  return `Jai Jinendra 🙏 I'm Samta — your friend for daily Jain questions.
+  return `Hello 🙏 I'm Samta — your friend for daily dietary and fasting questions.
 
 
 You can ask me things like:
 - Is today a fast day?
 - What time is sunrise / sunset?
-- What can I eat during Paryushana?
-- Find Jain restaurants near me
+- What can I eat during fast?
+- Find Jain/vegetarian restaurants near me
 - What can I substitute for onion?
 - Are the ingredients in this food or supplement safe?
 
