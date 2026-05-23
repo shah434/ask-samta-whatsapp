@@ -202,14 +202,15 @@ export default {
       // When off, this block is skipped entirely and the bot behaves exactly
       // as before. Only the sunset journey is wired; everything else stays on
       // the old path regardless of the switch.
-      if (env.REBUILD_MODE === 'on' && messageType === 'text') {
-        const rbIntent = classify(text, false);
-        if (rebuildSunsetClaims(user, rbIntent)) {
-          if (await handleRebuildSunset(phone, text, user, rbIntent, env)) return new Response('OK', { status: 200 });
-        } else if (rebuildRestaurantClaims(user, rbIntent)) {
-          if (await handleRebuildRestaurant(phone, text, user, rbIntent, env)) return new Response('OK', { status: 200 });
-        }
-      }
+    if (env.REBUILD_MODE === 'on' && messageType === 'text') {
+  const rbIntent = classify(text, false);
+  console.log(`[rebuild-gate] text="${text}" journey=${rbIntent.journey} city_raw=${rbIntent.params?.city_raw} sunsetClaims=${rebuildSunsetClaims(user, rbIntent)} restClaims=${rebuildRestaurantClaims(user, rbIntent)}`);
+  if (rebuildSunsetClaims(user, rbIntent)) {
+    if (await handleRebuildSunset(phone, text, user, rbIntent, env)) return new Response('OK', { status: 200 });
+  } else if (rebuildRestaurantClaims(user, rbIntent)) {
+    if (await handleRebuildRestaurant(phone, text, user, rbIntent, env)) return new Response('OK', { status: 200 });
+  }
+}
       
       // -- Pending delete confirmation ---------------------------------------
       const pendingDeleteKey = `${KV_PENDING_DELETE_PREFIX}${phone}`;
