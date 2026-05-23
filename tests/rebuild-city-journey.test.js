@@ -1,6 +1,6 @@
 // ============================================
 // rebuild-city-journey.test.js — claim/isolation logic for city journeys
-// Run: npm test
+// Run: npm test 
 // ============================================
 // Tests cityJourneyClaims() — the rule that decides which journey owns a turn.
 // The handler itself (handleCityJourney) calls network/WhatsApp/Claude and is
