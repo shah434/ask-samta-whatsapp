@@ -204,7 +204,6 @@ export default {
       // the old path regardless of the switch.
     if (env.REBUILD_MODE === 'on' && messageType === 'text') {
   const rbIntent = classify(text, false);
-  console.log(`[rebuild-gate] text="${text}" journey=${rbIntent.journey} city_raw=${rbIntent.params?.city_raw} sunsetClaims=${rebuildSunsetClaims(user, rbIntent)} restClaims=${rebuildRestaurantClaims(user, rbIntent)}`);
   if (rebuildSunsetClaims(user, rbIntent)) {
     if (await handleRebuildSunset(phone, text, user, rbIntent, env)) return new Response('OK', { status: 200 });
   } else if (rebuildRestaurantClaims(user, rbIntent)) {
