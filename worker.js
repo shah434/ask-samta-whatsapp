@@ -4,6 +4,7 @@
 // ============================================
 import { classify } from './src/classify.js';
 import { handleRebuildSunset, rebuildSunsetClaims } from './src/rebuild-sunset.js';
+import { handleRebuildRestaurant, rebuildRestaurantClaims } from './src/rebuild-restaurant.js';
 import { getUser, createUser, updateUser, deleteUser, setFlagKV } from './src/database.js';
 import { sendMessage, sendReaction, sendImage, getImageAsBase64 } from './src/whatsapp.js';
 import { callClaude } from './src/claude.js';
@@ -204,8 +205,9 @@ export default {
       if (env.REBUILD_MODE === 'on' && messageType === 'text') {
         const rbIntent = classify(text, false);
         if (rebuildSunsetClaims(user, rbIntent)) {
-          const handled = await handleRebuildSunset(phone, text, user, rbIntent, env);
-          if (handled) return new Response('OK', { status: 200 });
+          if (await handleRebuildSunset(phone, text, user, rbIntent, env)) return new Response('OK', { status: 200 });
+        } else if (rebuildRestaurantClaims(user, rbIntent)) {
+          if (await handleRebuildRestaurant(phone, text, user, rbIntent, env)) return new Response('OK', { status: 200 });
         }
       }
       
