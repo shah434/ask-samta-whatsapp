@@ -3,7 +3,10 @@
 // Uses prompt caching for cost reduction
 // ============================================
 
-export async function callClaude(messages, system, env) {
+// maxTokens defaults to 250 (tight, for 3-line verdicts). Journeys that
+// genuinely need a longer answer — e.g. restaurant lists — pass a higher
+// value explicitly. This keeps brevity the default everywhere else.
+export async function callClaude(messages, system, env, maxTokens = 250) {
   try {
     const res = await fetch(
       'https://api.anthropic.com/v1/messages',
@@ -17,7 +20,7 @@ export async function callClaude(messages, system, env) {
         },
         body: JSON.stringify({
           model: 'claude-haiku-4-5-20251001',
-          max_tokens: 250, // bot targets 3-line responses (~150 tokens typical); 400 is a safe ceiling
+          max_tokens: maxTokens,
           system,
           messages
         })
