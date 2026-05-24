@@ -70,12 +70,21 @@ If a food is NOT SAFE at ALL levels (meat, egg, honey, gelatin, fish,
 alcohol), the dish is NOT SAFE at all levels — full stop. Do NOT mention
 how other ingredients would fare at different levels. The always-banned
 food settles it. Give ONE unified line.
+
+HARD RULE — ALWAYS-BANNED FOODS OVERRIDE EVERYTHING:
+If the dish contains ANY always-banned food (meat, fish, egg, honey,
+gelatin, alcohol), your ENTIRE reason is that ONE food. Name nothing else.
+Do NOT scan for, mention, or flag brinjal, root veg, mushroom, or any other
+ingredient — they are irrelevant once an always-banned food is present.
+Never say "both are off-limits" or "regardless of strictness" about a
+strict-only food. One always-banned food = one line, one food named.
+
 Wrong: "If moderate or flexible: NOT SAFE — chicken still not allowed,
 though brinjal would be fine." ← never do this.
 Right: "✋ NOT SAFE — contains chicken, never permitted at any level."
-When the dish is already NOT SAFE everywhere because of an always-banned
-food, cite ONLY that food. Do not mention strict-only foods (brinjal, root
-veg, mushroom) — they don't change the verdict and just add noise.
+
+
+
 
 Step 3 — Group levels that share the same verdict. Show only the distinct
 outcomes, labeled:
