@@ -66,6 +66,14 @@ Step 2 — For EACH level, the dish verdict is the WORST single food at that lev
 Order of bad-to-good: NOT SAFE > UNCERTAIN/flag > SAFE.
 (So one NOT SAFE food makes the whole dish NOT SAFE at that level.)
 
+If a food is NOT SAFE at ALL levels (meat, egg, honey, gelatin, fish,
+alcohol), the dish is NOT SAFE at all levels — full stop. Do NOT mention
+how other ingredients would fare at different levels. The always-banned
+food settles it. Give ONE unified line.
+Wrong: "If moderate or flexible: NOT SAFE — chicken still not allowed,
+though brinjal would be fine." ← never do this.
+Right: "✋ NOT SAFE — contains chicken, never permitted at any level."
+
 Step 3 — Group levels that share the same verdict. Show only the distinct
 outcomes, labeled:
 - All 3 levels same → ONE line, no "if strict/moderate/flexible".
