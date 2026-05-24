@@ -164,6 +164,28 @@ export default {
         return new Response('OK', { status: 200 });
       }
 
+      // -- Scale brake: manual throttle switch -------------------------------
+      // Flip with: KV put mode:throttled = "1". Existing users keep working;
+      // new users get a hold message. Clears instantly on KV delete, no deploy.
+      const throttled = await env.KV.get('mode:throttled');
+      if (throttled) {
+        const existing = await getUser(phone, env);
+        if (!existing) {
+          await sendMessage(phone, `We're experiencing high demand right now 🙏 Please try again tomorrow.`, env);
+          return new Response('OK', { status: 200 });
+        }
+      }
+
+      // -- Scale brake: per-user daily rate limit (50/day) -------------------
+      const today = new Date().toISOString().slice(0, 10);
+      const rlKey = `ratelimit:${phone}:${today}`;
+      const count = parseInt(await env.KV.get(rlKey) || '0', 10);
+      if (count >= 50) {
+        await sendMessage(phone, `You've hit today's limit 🙏 Back tomorrow.`, env);
+        return new Response('OK', { status: 200 });
+      }
+      await env.KV.put(rlKey, String(count + 1), { expirationTtl: 86400 });
+      
       let text = message.text?.body || message.image?.caption || '';
       const t0 = Date.now();
 
