@@ -8,6 +8,7 @@ import { readPending } from './src/pending.js';
 import { handleRebuildSunset, rebuildSunsetClaims } from './src/rebuild-sunset.js';
 import { handleRebuildRestaurant, rebuildRestaurantClaims } from './src/rebuild-restaurant.js';
 import { getUser, createUser, updateUser, deleteUser, setFlagKV } from './src/database.js';
+import { routeFallback } from './src/route-fallback.js';
 import { sendMessage, sendReaction, sendImage, getImageAsBase64 } from './src/whatsapp.js';
 import { callClaude } from './src/claude.js';
 import { parseProfileUpdate, stripTags, buildSystemPrompt, classifyQuery } from './src/utils.js';
@@ -251,7 +252,38 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
           const handled = await handleRebuildRestaurant(phone, text, user, rbIntent, env);
           if (handled) return new Response('OK', { status: 200 });
         }
-        
+
+        // Fallback router: classify defaulted to food with no real food signal
+        // → ambiguous message. Ask Haiku for the journey + city, then re-route
+        // city journeys through the same handlers (pending/resume stays intact).
+        const ambiguous = rbIntent.journey === 'food'
+          && !rbIntent.params.food_text
+          && !rbIntent.params.has_image;
+        if (ambiguous) {
+          const r = await routeFallback(text, env);
+          if (r && (r.journey === 'restaurant' || r.journey === 'sunset')) {
+            const routed = {
+              journey: r.journey,
+              params: r.city ? { city_raw: r.city } : {},
+              prompt_blocks: r.journey === 'sunset' ? ['calendar'] : ['restaurant'],
+            };
+            if (r.city) {
+              // city present → bypass claim's bare-reply gate, call handler directly
+              const handled = r.journey === 'sunset'
+                ? await handleRebuildSunset(phone, text, user, routed, env)
+                : await handleRebuildRestaurant(phone, text, user, routed, env);
+              if (handled) return new Response('OK', { status: 200 });
+            } else {
+              // no city → handler will ask, using saved city if present
+              const handled = r.journey === 'sunset'
+                ? await handleRebuildSunset(phone, text, user, routed, env)
+                : await handleRebuildRestaurant(phone, text, user, routed, env);
+              if (handled) return new Response('OK', { status: 200 });
+            }
+          }
+        }
+
+        // Sunset didn't claim it → this is a fresh message. Abandon any stale
         // Sunset didn't claim it → this is a fresh message. Abandon any stale
         // city pending so a later "1" or city name can't resume a dead flow.
         if (user.pending_action) {
