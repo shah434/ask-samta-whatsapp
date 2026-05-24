@@ -16,4 +16,4 @@ enabled = true
 invocation_logs = true
 
 [vars]
-REBUILD_MODE = "on"
+REBUILD_MODE = "off"
