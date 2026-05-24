@@ -235,7 +235,6 @@ export default {
       ]);
 
       console.log(`[perf] phase1_parallel=${Date.now() - t0}ms type=${messageType}`);
-                  await sendMessage(phone, `DBG pa=${user?.pending_action} tithi=${user?.pending_tithi_city_ask}`, env);
 
 
       // -- New user creation + welcome ---------------------------------------
