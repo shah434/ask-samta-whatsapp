@@ -35,13 +35,12 @@ describe('cityJourneyClaims — fresh requests', () => {
     expect(cityJourneyClaims(noPending, foodIntent, 'restaurant')).toBe(false);
   });
 });
-
-describe('cityJourneyClaims — resume (pending owns the turn)', () => {
-  it('pending sunset → sunset gate claims any reply', () => {
-    expect(cityJourneyClaims(pendingSunset, foodIntent, 'sunset')).toBe(true);
+describe('cityJourneyClaims — resume (bare reply, pending owns the turn)', () => {
+  it('pending sunset + bare reply → sunset claims', () => {
+    expect(cityJourneyClaims(pendingSunset, foodIntent, 'sunset', 'London')).toBe(true);
   });
-  it('pending restaurant → restaurant gate claims any reply', () => {
-    expect(cityJourneyClaims(pendingRest, foodIntent, 'restaurant')).toBe(true);
+  it('pending restaurant + bare reply → restaurant claims', () => {
+    expect(cityJourneyClaims(pendingRest, foodIntent, 'restaurant', 'Mumbai')).toBe(true);
   });
 });
 
@@ -62,20 +61,27 @@ describe('cityJourneyClaims — fresh request supersedes STALE pending', () => {
   });
 });
 
-describe('cityJourneyClaims — bare reply still resumes pending (no hijack)', () => {
-  // A bare reply classifies as 'food' (classify's default). It must be claimed
-  // ONLY by the pending journey, never by the other city gate.
-  it('bare reply (food intent) + pending sunset → sunset claims', () => {
-    expect(cityJourneyClaims(pendingSunset, foodIntent, 'sunset')).toBe(true);
+describe('cityJourneyClaims — bare reply resumes, real question abandons', () => {
+  // The text decides, not the intent. A bare reply ("1", "London") resumes
+  // the pending journey. A real question ("can i eat paneer") does NOT — it
+  // abandons the pending and runs fresh.
+  it('bare number reply + pending sunset → sunset claims', () => {
+    expect(cityJourneyClaims(pendingSunset, foodIntent, 'sunset', '1')).toBe(true);
   });
-  it('bare reply (food intent) + pending sunset → restaurant does NOT claim', () => {
-    expect(cityJourneyClaims(pendingSunset, foodIntent, 'restaurant')).toBe(false);
+  it('bare city reply + pending sunset → sunset claims', () => {
+    expect(cityJourneyClaims(pendingSunset, foodIntent, 'sunset', 'London')).toBe(true);
   });
-  it('bare reply (food intent) + pending restaurant → restaurant claims', () => {
-    expect(cityJourneyClaims(pendingRest, foodIntent, 'restaurant')).toBe(true);
+  it('bare reply + pending sunset → restaurant does NOT claim', () => {
+    expect(cityJourneyClaims(pendingSunset, foodIntent, 'restaurant', '1')).toBe(false);
   });
-  it('bare reply (food intent) + pending restaurant → sunset does NOT claim', () => {
-    expect(cityJourneyClaims(pendingRest, foodIntent, 'sunset')).toBe(false);
+  it('real food question + pending sunset → sunset does NOT claim', () => {
+    expect(cityJourneyClaims(pendingSunset, foodIntent, 'sunset', 'can i eat paneer')).toBe(false);
+  });
+  it('bare number reply + pending restaurant → restaurant claims', () => {
+    expect(cityJourneyClaims(pendingRest, foodIntent, 'restaurant', '2')).toBe(true);
+  });
+  it('real food question + pending restaurant → restaurant does NOT claim', () => {
+    expect(cityJourneyClaims(pendingRest, foodIntent, 'restaurant', 'can i eat paneer')).toBe(false);
   });
 });
 
