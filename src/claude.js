@@ -39,6 +39,19 @@ export async function callClaude(messages, system, env, maxTokens = 250) {
       return 'Sorry I could not process that right now. Please try again.';
     }
 
+    // Accumulate approx daily cost (soft brake; provider alert is the real backstop)
+    try {
+      const u = data.usage;
+      if (u && env.KV) {
+        // Haiku 4.5 approx: $1/M input, $5/M output (adjust if pricing differs)
+        const cost = (u.input_tokens || 0) / 1e6 * 1
+                   + (u.output_tokens || 0) / 1e6 * 5;
+        const day = new Date().toISOString().slice(0, 10);
+        const key = `spend:${day}`;
+        const cur = parseFloat(await env.KV.get(key) || '0');
+        await env.KV.put(key, String(cur + cost), { expirationTtl: 172800 });
+      }
+    } catch {}
     return data.content[0].text;
 
   } catch (err) {
