@@ -72,6 +72,9 @@ async function hashPhone(phone) {
     .slice(0, 8);
 }
 
+function logTurn(u, fields) {
+  console.log(`[turn] u=${u} ${Object.entries(fields).map(([k, v]) => `${k}=${v}`).join(' ')}`);
+}
 
 function isTithiQuery(text) {
   const lower = (text || '').toLowerCase();
@@ -701,10 +704,18 @@ console.log(`[unmatched-short] u=${u} len=${text.length}`);    }
       }
 
       // -- Send response -----------------------------------------------------
+    // -- Send response -----------------------------------------------------
       if (!cleanResponse || !cleanResponse.trim()) {
-        console.log(`[empty_response] phone=${phone} queryTypes=${queryTypes.join(',')}`);
+        console.log(`[empty_response] u=${u} types=${queryTypes.join(',')}`);
         cleanResponse = "Let me know what you'd like to check 🙏";
       }
+      logTurn(u, {
+        journey: 'food',
+        types: queryTypes.join(',') || 'none',
+        ask_strictness: needsStrictnessAsk,
+        tithi: !!tithiFact,
+        img: messageType === 'image',
+      });
       await sendMessage(phone, tithiFact + cleanResponse, env);
       console.log(`[perf] sent=${Date.now() - t0}ms TOTAL`);
 
