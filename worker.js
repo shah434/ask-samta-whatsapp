@@ -532,6 +532,10 @@ console.log(`[unmatched-short] phone=${phone} len=${text.length}`);      }
 
       const updates = parseProfileUpdate(response);
       let cleanResponse = stripTags(response);
+      cleanResponse = cleanResponse
+        .replace(/TODAY_IS_TITHI:\s*(true|false)/gi, '')
+        .replace(/TODAY_TITHI_NAME:.*$/gim, '')
+        .trim();
 
       // -- Tithi-claim guard -------------------------------------------------
       const calendarHadToday = /TODAY_IS_TITHI:\s*true/i.test(calendarData);
