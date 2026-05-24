@@ -1,3 +1,6 @@
+// IN PLAIN ENGLISH: takes a city name, asks the geocoder where it is.
+// Returns one of four: found it / found several / found nothing / lookup failed.
+// The only file that talks to the geocoding service.
 // ============================================
 // resolveLocation — THE single location resolver (v3.1)
 // ============================================
