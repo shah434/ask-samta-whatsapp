@@ -15,8 +15,8 @@ import { sendMessage } from './whatsapp.js';
 import { callClaude } from './claude.js';
 import { buildSystemPrompt } from './utils.js';
 
-export function rebuildSunsetClaims(user, intent) {
-  return cityJourneyClaims(user, intent, 'sunset');
+export function rebuildSunsetClaims(user, intent, text) {
+  return cityJourneyClaims(user, intent, 'sunset', text);
 }
 
 async function answerSunset(phone, user, place, intent, env) {
