@@ -1,3 +1,6 @@
+// IN PLAIN ENGLISH: the bot's memory of "I'm waiting for an answer."
+// When the bot asks "which city?", this remembers so your NEXT message is
+// read as the answer, not a fresh question. Returns nothing if data is corrupt.
 // ============================================
 // pending.js — the ONE validated pending record (v3.1)
 // ============================================
