@@ -46,13 +46,22 @@ export function cityJourneyClaims(user, intent, journeyName, text) {
   if (CITY_JOURNEYS.has(intent.journey)) {
     return intent.journey === journeyName;
   }
-  // Not a city-journey. Only claim if a city-journey is pending AND this
-  // message is a BARE REPLY to it (a number pick, or a short city name).
-  // A fresh question ("can i eat paneer") is NOT a reply — fall through.
+  // Otherwise claim ONLY if this journey is pending AND the message is a
+  // bare reply to it. A non-bare message is a fresh request — don't claim,
+  // and abandon the pending below (handled in handleCityJourney).
   const pending = readPending(user.pending_action);
-  if (!pending || !CITY_JOURNEYS.has(pending.intent.journey)) return false;
-  if (pending.intent.journey !== journeyName) return false;
+  if (!pending || pending.intent.journey !== journeyName) return false;
   return isBareReply(text);
+}
+
+// Bare reply = a 1-2 digit number, OR a short 1-2 word string with no
+// question/food words (a typed city name). Anything else is a fresh message.
+export function isBareReply(text) {
+  const t = (text || '').trim();
+  if (/^[1-9][0-9]?$/.test(t)) return true;
+  if (t.split(/\s+/).length > 2) return false;
+  if (/\b(eat|safe|can|is|are|what|how|vegan|veg|jain)\b/i.test(t)) return false;
+  return t.length >= 2 && t.length <= 50;
 }
 
 // Bare reply = a 1-2 digit number, OR a short 1-2 word string with no
