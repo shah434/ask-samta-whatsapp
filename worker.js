@@ -481,13 +481,16 @@ console.log(`[unmatched-short] phone=${phone} len=${text.length}`);      }
       // -- Calendar — Jain only, gated on onboarding completion --------------
       let calendarData = '';
       const isOnboarded = !!user.strictness;
-      if (user.community === 'jain' && isOnboarded) {
+      if (user.community === 'jain') {
         const needsFullCalendar = queryTypes.includes('fasting')
           || queryTypes.includes('calendar')
           || /paryushana|coming|upcoming|next/i.test(text);
         const calendarLimit = needsFullCalendar ? 10 : 3;
         calendarData = formatEventsForClaude(calendarEvents, user.timezone, calendarLimit);
       }
+      let tithiFact = '';
+      const m = calendarData.match(/TODAY_IS_TITHI:\s*true[\s\S]*?TODAY_TITHI_NAME:\s*(.+)/i);
+      if (m) tithiFact = `Today is ${m[1].trim()} 🙏\n\n`;
 
       // -- Build Claude messages ---------------------------------------------
       let claudeMessages = [];
