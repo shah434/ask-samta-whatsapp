@@ -240,12 +240,22 @@ export default {
       // pending-delete) so those commands always win over a pending sunset
       // resume. classify() decides; only sunset is wired to the new path —
       // everything else falls through to the old code below.
-   if (messageType === 'text') {
+ if (messageType === 'text') {
         const rbIntent = classify(text, false);
         if (rebuildSunsetClaims(user, rbIntent, text)) {
           const handled = await handleRebuildSunset(phone, text, user, rbIntent, env);
           if (handled) return new Response('OK', { status: 200 });
         }
+        // Sunset didn't claim it → this is a fresh message. Abandon any stale
+        // city pending so a later "1" or city name can't resume a dead flow.
+        if (user.pending_action) {
+          const p = readPending(user.pending_action);
+          if (p && (p.need === 'city' || p.need === 'city_pick')) {
+            await updateUser(phone, { pending_action: null }, env);
+            user.pending_action = null;
+          }
+        }
+      }
         // Fresh, non-bare message falling through past a stale city pick:
         // abandon the dead pending so a later "1" can't resume it.
         if (user.pending_action) {
