@@ -66,6 +66,7 @@ export function isBareReply(text) {
 
 // Persist a resolved place onto the user (DB + in-memory), clearing pending.
 async function saveCity(phone, user, place, env) {
+  await sendMessage(phone, `DEBUG place=${JSON.stringify(place)}`, env);
   const display = `${place.name}${place.admin1 ? ', ' + place.admin1 : ''}${place.country ? ', ' + place.country : ''}`;
   await updateUser(phone, {
     city: display,
