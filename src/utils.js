@@ -143,7 +143,7 @@ const dynamicContent = useCases + profile + history + restaurantData + calendar 
     {
       type: 'text',
       text: staticContent,
-      cache_control: { type: 'ephemeral' }
+      cache_control: { type: 'ephemeral', ttl: 3600 }
     },
     {
       type: 'text',
