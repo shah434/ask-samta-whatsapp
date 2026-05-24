@@ -5,6 +5,8 @@
 // ============================================
 import { classify } from './src/classify.js';
 import { readPending } from './src/pending.js';
+import { rulesFor, rulesForNumber, FAST_MENU } from './src/fasting-rules.js';
+import { serializePending } from './src/pending.js';
 import { handleRebuildSunset, rebuildSunsetClaims } from './src/rebuild-sunset.js';
 import { handleRebuildRestaurant, rebuildRestaurantClaims } from './src/rebuild-restaurant.js';
 import { getUser, createUser, updateUser, deleteUser, setFlagKV } from './src/database.js';
