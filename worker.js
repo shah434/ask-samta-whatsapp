@@ -490,6 +490,7 @@ console.log(`[unmatched-short] phone=${phone} len=${text.length}`);      }
       let tithiFact = '';
       const m = calendarData.match(/TODAY_IS_TITHI:\s*true[\s\S]*?TODAY_TITHI_NAME:\s*(.+)/i);
       if (m) tithiFact = `Today is ${m[1].trim()} 🙏\n\n`;
+      tithiFact = `Today is Beej 🙏\n\n`;  // TEMP test, remove after
 
       // -- Build Claude messages ---------------------------------------------
       let claudeMessages = [];
