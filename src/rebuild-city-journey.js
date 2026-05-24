@@ -1,3 +1,6 @@
+// IN PLAIN ENGLISH: the city flow logic. Do I have a city? If not, ask.
+// When they reply, is it a number picking from a list or a new city name?
+// Resolve it, save it, hand off to the journey. Shared by sunset & restaurant.
 // ============================================
 // rebuild-city-journey.js — shared core for city-needing journeys (v3.1)
 // ============================================
