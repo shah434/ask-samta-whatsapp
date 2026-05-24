@@ -159,10 +159,13 @@ export default {
       const message = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
       if (!message) return new Response('OK', { status: 200 });
 
+      
       const phone = message.from;
       const messageId = message.id;
       const messageType = message.type;
       const u = await hashPhone(phone);
+            await sendMessage(phone, `DBG pa=${user?.pending_action} tithi=${user?.pending_tithi_city_ask}`, env);
+
 
       if (SILENT_DROP_TYPES.has(messageType)) {
         return new Response('OK', { status: 200 });
@@ -231,6 +234,8 @@ export default {
         getUser(phone, env),
         getCalendarCached(env),
       ]);
+            await sendMessage(phone, `DBG pa=${user?.pending_action} tithi=${user?.pending_tithi_city_ask}`, env);
+
       console.log(`[perf] phase1_parallel=${Date.now() - t0}ms type=${messageType}`);
 
       // -- New user creation + welcome ---------------------------------------
