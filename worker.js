@@ -480,7 +480,6 @@ console.log(`[unmatched-short] phone=${phone} len=${text.length}`);      }
 
       // -- Calendar — Jain only, gated on onboarding completion --------------
       let calendarData = '';
-      const isOnboarded = !!user.strictness;
       if (user.community === 'jain') {
         const needsFullCalendar = queryTypes.includes('fasting')
           || queryTypes.includes('calendar')
