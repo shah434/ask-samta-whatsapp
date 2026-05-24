@@ -1,3 +1,6 @@
+// IN PLAIN ENGLISH: the sunset-specific bit. Says what question to ask
+// ("which city?") and what to do once we have a city (look up sun times).
+// Hands the actual flow to rebuild-city-journey.js. Imported by worker.js.
 // ============================================
 // rebuild-sunset.js — v3.1 sunset journey (thin; uses shared city core)
 // ============================================
@@ -31,6 +34,7 @@ async function answerSunset(phone, user, place, intent, env) {
 export async function handleRebuildSunset(phone, text, user, intent, env) {
   return handleCityJourney(phone, text, user, intent, env, {
     name: 'sunset',
-askCityPrompt: `Which city should I check sunset for?`,    answer: answerSunset,
+    askCityPrompt: `Which city should I check sunset for? 🙏`,
+    answer: answerSunset,
   });
 }
