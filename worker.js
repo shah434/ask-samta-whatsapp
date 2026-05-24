@@ -164,7 +164,6 @@ export default {
       const messageId = message.id;
       const messageType = message.type;
       const u = await hashPhone(phone);
-            await sendMessage(phone, `DBG pa=${user?.pending_action} tithi=${user?.pending_tithi_city_ask}`, env);
 
 
       if (SILENT_DROP_TYPES.has(messageType)) {
@@ -234,9 +233,10 @@ export default {
         getUser(phone, env),
         getCalendarCached(env),
       ]);
-            await sendMessage(phone, `DBG pa=${user?.pending_action} tithi=${user?.pending_tithi_city_ask}`, env);
 
       console.log(`[perf] phase1_parallel=${Date.now() - t0}ms type=${messageType}`);
+                  await sendMessage(phone, `DBG pa=${user?.pending_action} tithi=${user?.pending_tithi_city_ask}`, env);
+
 
       // -- New user creation + welcome ---------------------------------------
       if (!user) {
