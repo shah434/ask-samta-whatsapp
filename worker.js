@@ -1,6 +1,7 @@
 // Samta v2.5
 // ============================================
 // worker.js — Main Cloudflare Worker handler
+// location.js now used only by rebuild-restaurant.js
 // ============================================
 import { classify } from './src/classify.js';
 import { readPending } from './src/pending.js';
@@ -9,7 +10,6 @@ import { handleRebuildRestaurant, rebuildRestaurantClaims } from './src/rebuild-
 import { getUser, createUser, updateUser, deleteUser, setFlagKV } from './src/database.js';
 import { sendMessage, sendReaction, sendImage, getImageAsBase64 } from './src/whatsapp.js';
 import { callClaude } from './src/claude.js';
-import { searchRestaurants, detectLocation } from './src/location.js';
 import { parseProfileUpdate, stripTags, buildSystemPrompt, classifyQuery } from './src/utils.js';
 import {
   DEFAULT_DIET,
@@ -355,20 +355,7 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
         return new Response('OK', { status: 200 });
       }
 
-      // -- Enrichment: restaurant --------------------------------------------
-      let googleResults = [];
-      const location = user._justResolvedCity ? user.city : detectLocation(text);
-
-      if (location && location !== 'unknown') {
-        const communityQuery = user.community === 'baps'
-          ? 'BAPS Swaminarayan friendly'
-          : 'Jain friendly';
-        googleResults = await searchRestaurants(communityQuery, location, env);
-        if (!user._justResolvedCity) {
-          await updateUser(phone, { city: location }, env);
-          user.city = location;
-        }
-      }
+     let googleResults = [];
 
       // -- Sunset / sunrise --------------------------------------------------
       let sunData = '';
