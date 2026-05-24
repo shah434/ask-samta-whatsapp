@@ -43,9 +43,11 @@ export async function callClaude(messages, system, env, maxTokens = 250) {
     try {
       const u = data.usage;
       if (u && env.KV) {
-        // Haiku 4.5 approx: $1/M input, $5/M output (adjust if pricing differs)
         const cost = (u.input_tokens || 0) / 1e6 * 1
+                   + (u.cache_creation_input_tokens || 0) / 1e6 * 1.25
+                   + (u.cache_read_input_tokens || 0) / 1e6 * 0.10
                    + (u.output_tokens || 0) / 1e6 * 5;
+        console.log(`[cost] in=${u.input_tokens} cache_w=${u.cache_creation_input_tokens||0} cache_r=${u.cache_read_input_tokens||0} out=${u.output_tokens}`);
         const day = new Date().toISOString().slice(0, 10);
         const key = `spend:${day}`;
         const cur = parseFloat(await env.KV.get(key) || '0');
