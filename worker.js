@@ -63,6 +63,15 @@ const TITHI_CLAIM_PATTERNS = [
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────────────────────
+async function hashPhone(phone) {
+  const data = new TextEncoder().encode(phone || '');
+  const buf = await crypto.subtle.digest('SHA-256', data);
+  return Array.from(new Uint8Array(buf))
+    .map(b => b.toString(16).padStart(2, '0'))
+    .join('')
+    .slice(0, 8);
+}
+
 
 function isTithiQuery(text) {
   const lower = (text || '').toLowerCase();
@@ -150,6 +159,7 @@ export default {
       const phone = message.from;
       const messageId = message.id;
       const messageType = message.type;
+      const u = await hashPhone(phone);
 
       if (SILENT_DROP_TYPES.has(messageType)) {
         return new Response('OK', { status: 200 });
@@ -550,7 +560,7 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
       const queryTypes = classifyQuery(text, messageType === 'image');
 
       if (queryTypes.length === 1 && queryTypes[0] === 'general' && text && text.length < 30) {
-console.log(`[unmatched-short] phone=${phone} len=${text.length}`);      }
+console.log(`[unmatched-short] u=${u} len=${text.length}`);    }
 
       const lastBotReply = (user.history_1_a || '').toLowerCase();
       const isShortReply = text.trim().length < 20;
@@ -622,7 +632,7 @@ console.log(`[unmatched-short] phone=${phone} len=${text.length}`);      }
       const calendarHadToday = /TODAY_IS_TITHI:\s*true/i.test(calendarData);
       const claimsTithiToday = TITHI_CLAIM_PATTERNS.some(p => p.test(cleanResponse));
       if (!calendarHadToday && claimsTithiToday) {
-        console.log(`[guard] stripped_tithi_claim phone=${phone} response="${cleanResponse.slice(0, 200)}"`);
+        console.log(`[guard] stripped_tithi_claim u=${u}`);
         const sentences = cleanResponse.split(/(?<=[.!?])\s+/);
         cleanResponse = sentences
           .filter(s => !TITHI_CLAIM_PATTERNS.some(p => p.test(s)))
