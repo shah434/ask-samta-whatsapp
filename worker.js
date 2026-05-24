@@ -262,13 +262,29 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
           const fastPending = readPending(user.pending_action);
           const reply = text.trim();
 
-          // Resume: a number reply to a shown fast menu
-          if (fastPending && fastPending.need === 'fast_pick' && /^[1-7]$/.test(reply)) {
-            const rules = rulesForNumber(parseInt(reply, 10));
-            if (rules) {
+         // Resume: reply to a shown fast menu — number OR typed fast name
+          if (fastPending && fastPending.need === 'fast_pick') {
+            // number 1-7
+            if (/^[1-7]$/.test(reply)) {
+              const rules = rulesForNumber(parseInt(reply, 10));
+              if (rules) {
+                await updateUser(phone, { pending_action: null }, env);
+                await sendMessage(phone, rules, env);
+                return new Response('OK', { status: 200 });
+              }
+            }
+            // typed a fast name (e.g. "upvas")
+            if (rbIntent.params.fast_term && rbIntent.params.fast_term !== 'pachkhan_general') {
+              const rules = rulesFor(rbIntent.params.fast_term);
+              if (rules) {
+                await updateUser(phone, { pending_action: null }, env);
+                await sendMessage(phone, rules, env);
+                return new Response('OK', { status: 200 });
+              }
+            }
+            // "8" or complex fast → clear pending, fall through to prompt
+            if (reply === '8') {
               await updateUser(phone, { pending_action: null }, env);
-              await sendMessage(phone, rules, env);
-              return new Response('OK', { status: 200 });
             }
           }
 
