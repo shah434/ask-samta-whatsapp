@@ -434,8 +434,7 @@ export default {
       const queryTypes = classifyQuery(text, messageType === 'image');
 
       if (queryTypes.length === 1 && queryTypes[0] === 'general' && text && text.length < 30) {
-        console.log(`[unmatched-short] phone=${phone} text="${text}"`);
-      }
+console.log(`[unmatched-short] phone=${phone} len=${text.length}`);      }
 
       const lastBotReply = (user.history_1_a || '').toLowerCase();
       const isShortReply = text.trim().length < 20;
@@ -569,7 +568,7 @@ export default {
 
       // -- Send response -----------------------------------------------------
       if (!cleanResponse || !cleanResponse.trim()) {
-        console.log(`[empty_response] phone=${phone} queryTypes=${queryTypes.join(',')} text="${text.slice(0, 80)}"`);
+        console.log(`[empty_response] phone=${phone} queryTypes=${queryTypes.join(',')}`);
         cleanResponse = "Let me know what you'd like to check 🙏";
       }
       await sendMessage(phone, cleanResponse, env);
