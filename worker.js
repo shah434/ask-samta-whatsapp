@@ -235,12 +235,12 @@ export default {
         return new Response('OK', { status: 200 });
       }
 
-      // -- REBUILD: new-foundation sunset path -------------------------------
+ // -- REBUILD: new-foundation sunset path -------------------------------
       // Runs AFTER the keyword checks above (delete me / help / greeting /
       // pending-delete) so those commands always win over a pending sunset
       // resume. classify() decides; only sunset is wired to the new path —
       // everything else falls through to the old code below.
- if (messageType === 'text') {
+      if (messageType === 'text') {
         const rbIntent = classify(text, false);
         if (rebuildSunsetClaims(user, rbIntent, text)) {
           const handled = await handleRebuildSunset(phone, text, user, rbIntent, env);
@@ -252,20 +252,7 @@ export default {
           const p = readPending(user.pending_action);
           if (p && (p.need === 'city' || p.need === 'city_pick')) {
             await updateUser(phone, { pending_action: null }, env);
-            user.pending_action = null;
-          }
-        }
-      }
-        // Fresh, non-bare message falling through past a stale city pick:
-        // abandon the dead pending so a later "1" can't resume it.
-        if (user.pending_action) {
-          const p = readPending(user.pending_action);
-          if (p && p.need === 'city_pick') {
-            await updateUser(phone, { pending_action: null }, env);
-            user.pending_action = null;
-          }
-        }
-      }
+            user.pending_actio
       // -- Pending strictness reply check ------------------------------------
       if (user.pending_strictness_ask && messageType === 'text') {
         const handled = await applyStrictnessReply(phone, text, env);
