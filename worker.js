@@ -252,7 +252,11 @@ export default {
           const p = readPending(user.pending_action);
           if (p && (p.need === 'city' || p.need === 'city_pick')) {
             await updateUser(phone, { pending_action: null }, env);
-            user.pending_actio
+            user.pending_action = null;
+          }
+        }
+      }
+            
       // -- Pending strictness reply check ------------------------------------
       if (user.pending_strictness_ask && messageType === 'text') {
         const handled = await applyStrictnessReply(phone, text, env);
