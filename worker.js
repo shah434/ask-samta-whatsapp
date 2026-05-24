@@ -3,6 +3,7 @@
 // worker.js — Main Cloudflare Worker handler
 // ============================================
 import { classify } from './src/classify.js';
+import { readPending } from './src/pending.js';
 import { handleRebuildSunset, rebuildSunsetClaims } from './src/rebuild-sunset.js';
 import { getUser, createUser, updateUser, deleteUser, setFlagKV } from './src/database.js';
 import { sendMessage, sendReaction, sendImage, getImageAsBase64 } from './src/whatsapp.js';
@@ -239,14 +240,22 @@ export default {
       // pending-delete) so those commands always win over a pending sunset
       // resume. classify() decides; only sunset is wired to the new path —
       // everything else falls through to the old code below.
-      if (messageType === 'text') {
+   if (messageType === 'text') {
         const rbIntent = classify(text, false);
-       if (rebuildSunsetClaims(user, rbIntent, text)) {
+        if (rebuildSunsetClaims(user, rbIntent, text)) {
           const handled = await handleRebuildSunset(phone, text, user, rbIntent, env);
           if (handled) return new Response('OK', { status: 200 });
         }
+        // Fresh, non-bare message falling through past a stale city pick:
+        // abandon the dead pending so a later "1" can't resume it.
+        if (user.pending_action) {
+          const p = readPending(user.pending_action);
+          if (p && p.need === 'city_pick') {
+            await updateUser(phone, { pending_action: null }, env);
+            user.pending_action = null;
+          }
+        }
       }
-
       // -- Pending strictness reply check ------------------------------------
       if (user.pending_strictness_ask && messageType === 'text') {
         const handled = await applyStrictnessReply(phone, text, env);
