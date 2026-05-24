@@ -64,16 +64,6 @@ export function isBareReply(text) {
   return t.length >= 2 && t.length <= 50;
 }
 
-// Bare reply = a 1-2 digit number, OR a short 1-2 word string with no
-// question/food words (a typed city name). Anything else is a fresh message.
-function isBareReply(text) {
-  const t = (text || '').trim();
-  if (/^[1-9][0-9]?$/.test(t)) return true;
-  if (t.split(/\s+/).length > 2) return false;
-  if (/\b(eat|safe|can|is|are|what|how|vegan|veg|jain)\b/i.test(t)) return false;
-  return t.length >= 2 && t.length <= 50;
-}
-
 // Persist a resolved place onto the user (DB + in-memory), clearing pending.
 async function saveCity(phone, user, place, env) {
   const display = `${place.name}${place.admin1 ? ', ' + place.admin1 : ''}${place.country ? ', ' + place.country : ''}`;
