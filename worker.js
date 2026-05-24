@@ -185,6 +185,20 @@ export default {
         return new Response('OK', { status: 200 });
       }
       await env.KV.put(rlKey, String(count + 1), { expirationTtl: 86400 });
+
+      // -- Scale brake: global daily spend ceiling ($10, soft) ---------------
+      const spendDay = new Date().toISOString().slice(0, 10);
+      const spend = parseFloat(await env.KV.get(`spend:${spendDay}`) || '0');
+      if (spend >= 10) {
+        if (messageType === 'image') {
+          await sendMessage(phone, `We're at capacity for image scans today 🙏 Text questions still work.`, env);
+          return new Response('OK', { status: 200 });
+        }
+        if (spend >= 12) {
+          await sendMessage(phone, `We're at capacity today 🙏 Please try again tomorrow.`, env);
+          return new Response('OK', { status: 200 });
+        }
+      }
       
       let text = message.text?.body || message.image?.caption || '';
       const t0 = Date.now();
