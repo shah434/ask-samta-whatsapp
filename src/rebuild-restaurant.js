@@ -16,10 +16,11 @@ async function answerRestaurant(phone, user, place, intent, env) {
   const communityQuery = user.community === 'baps'
     ? 'BAPS Swaminarayan friendly'
     : 'Jain friendly';
-  const results = await searchRestaurants(communityQuery, place.name, env);
+const loc = user.city || [place.name, place.admin1, place.country].filter(Boolean).join(', ');
+  const results = await searchRestaurants(communityQuery, loc, env);
 
   if (!results.length) {
-    await sendMessage(phone, `I couldn't find vegetarian-friendly spots in ${place.name} right now. Try a nearby larger city 🙏`, env);
+    await sendMessage(phone, `I couldn't find vegetarian-friendly spots in ${loc} right now. Try a nearby larger city 🙏`, env);
     return;
   }
 
