@@ -35,9 +35,10 @@ export const FAST_MENU = `What fast are you observing?
 5 — Chauvihar (no food or water after sunset)
 6 — Tivihar (water only after sunset)
 7 — Navkarsi (no food 48 min after sunrise)
-8 — More complex fasts
 
 You can also type the name of your fast, or just ask something else 🙏`;
+
+// 8 — More complex fasts
 
 // Build the full reply for a known flat fast. null if not a flat-menu fast.
 export function rulesFor(category) {
