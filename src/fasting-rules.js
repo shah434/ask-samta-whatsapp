@@ -1,15 +1,17 @@
 // ============================================
 // fasting-rules.js — code-driven fast rules + menu (flat: top 7)
 // ============================================
-// Deterministic. Named fast → its rules. Bare fasting → the 7-option menu.
-// Number reply 1-7 → that fast's rules. Option 8 (complex) → handled by prompt.
-// Rules text copied verbatim from prompts.js USE_CASE_FASTING.
+// Deterministic. Code emits the menu and rules verbatim — the model never
+// touches this flow (Haiku drifts on fixed menus). Option 8 (complex fasts)
+// falls through to the prompt, which owns that sub-tree.
+// Video links are placeholders for now — swap real URLs in RESOURCE below.
 // ============================================
 
-const ELDERS = `\n\nYour family's tradition may differ — confirm with your community elders 🙏`;
+const ELDERS = `Your family's tradition may differ — confirm with your community elders 🙏`;
+const RESOURCE = `Here is a helpful resource: [video coming soon]`;
 
-// category → rules text
-export const FAST_RULES = {
+// category → short rules text (copied from prompts.js USE_CASE_FASTING)
+const FAST_RULES = {
   upvas:     `*Upvas* — water or boiled water only. No food whatsoever.`,
   ekasan:    `*Ekasan* — one meal only, eaten before sunset. Full Jain dietary rules apply. No snacking before or after.`,
   ayambil:   `*Ayambil* — one bland meal. No dairy, oil, sugar, spices, or green vegetables. Only grains and pulses.`,
@@ -19,8 +21,7 @@ export const FAST_RULES = {
   navkarsi:  `*Navkarsi* — no food or water for 48 minutes after sunrise. After that, full Jain rules apply.`,
 };
 
-// menu number → category
-const MENU = {
+const MENU_NUM = {
   1: 'upvas', 2: 'ekasan', 3: 'ayambil', 4: 'biyasan',
   5: 'chauvihar', 6: 'tivihar', 7: 'navkarsi',
 };
@@ -38,14 +39,15 @@ export const FAST_MENU = `What fast are you observing?
 
 You can also type the name of your fast, or just ask something else 🙏`;
 
-// Rules for a known category, or null if not a flat-menu fast.
+// Build the full reply for a known flat fast. null if not a flat-menu fast.
 export function rulesFor(category) {
   const r = FAST_RULES[category];
-  return r ? r + ELDERS : null;
+  if (!r) return null;
+  return `${r}\n\n${RESOURCE}\n\n${ELDERS}`;
 }
 
-// Map a menu number (1-7) to rules. 8+ or invalid → null.
+// number 1-7 → rules. 8+ / invalid → null (caller lets prompt handle).
 export function rulesForNumber(n) {
-  const cat = MENU[n];
+  const cat = MENU_NUM[n];
   return cat ? rulesFor(cat) : null;
 }
