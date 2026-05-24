@@ -241,7 +241,7 @@ export default {
       // everything else falls through to the old code below.
       if (messageType === 'text') {
         const rbIntent = classify(text, false);
-        if (rebuildSunsetClaims(user, rbIntent)) {
+       if (rebuildSunsetClaims(user, rbIntent, text)) {
           const handled = await handleRebuildSunset(phone, text, user, rbIntent, env);
           if (handled) return new Response('OK', { status: 200 });
         }
