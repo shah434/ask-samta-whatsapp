@@ -98,9 +98,10 @@ export function buildSystemPrompt(user, googleResults, calendarData, sunData, qu
   const useCases = types.map(t => USE_CASE_BLOCKS[t] || '').join('\n');
 
   // STATIC content — cached by Anthropic
-const staticContent = CORE_IDENTITY + rules;
-  // DYNAMIC content — changes per message, not cached
+  const staticContent = CORE_IDENTITY + rules + useCases;
 
+  // DYNAMIC content — changes per message, not cached
+const dynamicContent = profile + history + restaurantData + calendar + sun;
   // Profile block
   const profile = `
 CURRENT USER PROFILE:
