@@ -255,6 +255,42 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
           if (handled) return new Response('OK', { status: 200 });
         }
 
+// -- REBUILD: code-driven fasting (flat menu, top 7) --------------
+        // Named fast → rules. Bare pachkhan → 7-menu (pending fast_pick).
+        // Number reply to that menu → rules. Option 8 falls to the prompt.
+        {
+          const fastPending = readPending(user.pending_action);
+          const reply = text.trim();
+
+          // Resume: a number reply to a shown fast menu
+          if (fastPending && fastPending.need === 'fast_pick' && /^[1-7]$/.test(reply)) {
+            const rules = rulesForNumber(parseInt(reply, 10));
+            if (rules) {
+              await updateUser(phone, { pending_action: null }, env);
+              await sendMessage(phone, rules, env);
+              return new Response('OK', { status: 200 });
+            }
+          }
+
+          // Fresh: classify found a fast
+          if (rbIntent.params.fast_term) {
+            const ft = rbIntent.params.fast_term;
+            if (ft === 'pachkhan_general') {
+              const rec = serializePending({ need: 'fast_pick', intent: rbIntent });
+              await updateUser(phone, { pending_action: rec }, env);
+              await sendMessage(phone, FAST_MENU, env);
+              return new Response('OK', { status: 200 });
+            }
+            const rules = rulesFor(ft);
+            if (rules) {
+              await sendMessage(phone, rules, env);
+              return new Response('OK', { status: 200 });
+            }
+            // ft is a complex fast not in flat menu → fall through to prompt
+          }
+        }
+
+        
         // Fallback router: classify defaulted to food with no real food signal
         // → ambiguous message. Ask Haiku for the journey + city, then re-route
         // city journeys through the same handlers (pending/resume stays intact).
@@ -285,7 +321,6 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
           }
         }
 
-        // Sunset didn't claim it → this is a fresh message. Abandon any stale
         // Sunset didn't claim it → this is a fresh message. Abandon any stale
         // city pending so a later "1" or city name can't resume a dead flow.
         if (user.pending_action) {
