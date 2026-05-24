@@ -201,7 +201,7 @@ export default {
       // When off, this block is skipped entirely and the bot behaves exactly
       // as before. Only the sunset journey is wired; everything else stays on
       // the old path regardless of the switch.
-      if (env.REBUILD_MODE === 'on' && messageType === 'text') {
+      if (messageType === 'text') {
         const rbIntent = classify(text, false);
         if (rebuildSunsetClaims(user, rbIntent)) {
           const handled = await handleRebuildSunset(phone, text, user, rbIntent, env);
