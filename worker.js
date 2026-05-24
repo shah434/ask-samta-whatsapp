@@ -4,7 +4,6 @@
 // ============================================
 import { classify } from './src/classify.js';
 import { handleRebuildSunset, rebuildSunsetClaims } from './src/rebuild-sunset.js';
-import { handleRebuildRestaurant, rebuildRestaurantClaims } from './src/rebuild-restaurant.js';
 import { getUser, createUser, updateUser, deleteUser, setFlagKV } from './src/database.js';
 import { sendMessage, sendReaction, sendImage, getImageAsBase64 } from './src/whatsapp.js';
 import { callClaude } from './src/claude.js';
@@ -196,21 +195,7 @@ export default {
         }
         // Fall through — answer the question too
       }
-// -- REBUILD SWITCH: new-foundation sunset path (Option A) --------------
-      // When REBUILD_MODE === 'on', sunset requests (and replies to a sunset
-      // pending record) route through the new classify→resolver→pending path.
-      // When off, this block is skipped entirely and the bot behaves exactly
-      // as before. Only the sunset journey is wired; everything else stays on
-      // the old path regardless of the switch.
-      if (env.REBUILD_MODE === 'on' && messageType === 'text') {
-        const rbIntent = classify(text, false);
-        if (rebuildSunsetClaims(user, rbIntent)) {
-          if (await handleRebuildSunset(phone, text, user, rbIntent, env)) return new Response('OK', { status: 200 });
-        } else if (rebuildRestaurantClaims(user, rbIntent)) {
-          if (await handleRebuildRestaurant(phone, text, user, rbIntent, env)) return new Response('OK', { status: 200 });
-        }
-      }
-      
+
       // -- Pending delete confirmation ---------------------------------------
       const pendingDeleteKey = `${KV_PENDING_DELETE_PREFIX}${phone}`;
       const pendingDelete = await env.KV.get(pendingDeleteKey);
@@ -248,7 +233,19 @@ export default {
         await sendMessage(phone, getWelcomeMessage(), env);
         return new Response('OK', { status: 200 });
       }
-
+// -- REBUILD SWITCH: new-foundation sunset path (Option A) --------------
+      // When REBUILD_MODE === 'on', sunset requests (and replies to a sunset
+      // pending record) route through the new classify→resolver→pending path.
+      // When off, this block is skipped entirely and the bot behaves exactly
+      // as before. Only the sunset journey is wired; everything else stays on
+      // the old path regardless of the switch.
+      if (env.REBUILD_MODE === 'on' && messageType === 'text') {
+        const rbIntent = classify(text, false);
+        if (rebuildSunsetClaims(user, rbIntent)) {
+          const handled = await handleRebuildSunset(phone, text, user, rbIntent, env);
+          if (handled) return new Response('OK', { status: 200 });
+        }
+      }
       // -- Pending strictness reply check ------------------------------------
       if (user.pending_strictness_ask && messageType === 'text') {
         const handled = await applyStrictnessReply(phone, text, env);
