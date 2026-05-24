@@ -5,7 +5,6 @@
 // ============================================
 import { classify } from './src/classify.js';
 import { readPending } from './src/pending.js';
-import { rulesFor, rulesForNumber, FAST_MENU } from './src/fasting-rules.js';
 import { serializePending } from './src/pending.js';
 import { handleRebuildSunset, rebuildSunsetClaims } from './src/rebuild-sunset.js';
 import { handleRebuildRestaurant, rebuildRestaurantClaims } from './src/rebuild-restaurant.js';
@@ -253,57 +252,6 @@ export default {
 if (rebuildRestaurantClaims(user, rbIntent, text)) {
           const handled = await handleRebuildRestaurant(phone, text, user, rbIntent, env);
           if (handled) return new Response('OK', { status: 200 });
-        }
-
-// -- REBUILD: code-driven fasting (flat menu, top 7) --------------
-        // Named fast → rules. Bare pachkhan → 7-menu (pending fast_pick).
-        // Number reply to that menu → rules. Option 8 falls to the prompt.
-        {
-          const fastPending = readPending(user.pending_action);
-          const reply = text.trim();
-
-         // Resume: reply to a shown fast menu — number OR typed fast name
-          if (fastPending && fastPending.need === 'fast_pick') {
-            // number 1-7
-            if (/^[1-7]$/.test(reply)) {
-              const rules = rulesForNumber(parseInt(reply, 10));
-              if (rules) {
-                await updateUser(phone, { pending_action: null }, env);
-                await sendMessage(phone, rules, env);
-                return new Response('OK', { status: 200 });
-              }
-            }
-            // typed a fast name (e.g. "upvas")
-            if (rbIntent.params.fast_term && rbIntent.params.fast_term !== 'pachkhan_general') {
-              const rules = rulesFor(rbIntent.params.fast_term);
-              if (rules) {
-                await updateUser(phone, { pending_action: null }, env);
-                await sendMessage(phone, rules, env);
-                return new Response('OK', { status: 200 });
-              }
-            }
-            // "8" or complex fast → clear pending, fall through to prompt
-            if (reply === '8') {
-              await updateUser(phone, { pending_action: null }, env);
-            }
-          }
-
-          // Fresh: classify found a fast
-          if (rbIntent.params.fast_term) {
-            const ft = rbIntent.params.fast_term;
-            if (ft === 'pachkhan_general') {
-              const rec = serializePending({ need: 'fast_pick', intent: rbIntent });
-              await updateUser(phone, { pending_action: rec }, env);
-              await sendMessage(phone, FAST_MENU, env);
-              return new Response('OK', { status: 200 });
-            }
-            const rules = rulesFor(ft);
-            if (rules) {
-              await sendMessage(phone, rules, env);
-              return new Response('OK', { status: 200 });
-            }
-            // ft is a complex fast not in flat menu → fall through to prompt
-          }
         }
 
         
