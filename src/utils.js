@@ -101,7 +101,6 @@ export function buildSystemPrompt(user, googleResults, calendarData, sunData, qu
   const staticContent = CORE_IDENTITY + rules + useCases;
 
   // DYNAMIC content — changes per message, not cached
-const dynamicContent = profile + history + restaurantData + calendar + sun;
   // Profile block
   const profile = `
 CURRENT USER PROFILE:
@@ -139,7 +138,7 @@ End with: "Call ahead to confirm dietary requirements"`
 TITHI RULE: Never state the tithi name or that today is/isn't a tithi — that line is added separately. If today is a tithi, give ONLY a 2-line explanation of its dietary practice. Do not name it. Do NOT open with any greeting (no "Jai Jinendra", "🙏", etc.) — a greeting is already added separately.`
     : '';
 
-const dynamicContent = useCases + profile + history + restaurantData + calendar + sun;
+const dynamicContent = profile + history + restaurantData + calendar + sun;
   return [
     {
       type: 'text',
