@@ -78,8 +78,10 @@ Label format:
 "If flexible: [verdict] — [reason]"
 When two levels share a verdict, join them: "If moderate or flexible: ..."
 
-Reasons — name up to 3 offending foods per line. If a line has more than 3
-bad foods, write: "the dish has several non-Jain ingredients like X, Y, Z."
+Reasons — name up to 3 offending foods per line, worst-first: always-banned
+(meat, egg, honey, gelatin, onion/garlic) before strict-only (root veg,
+brinjal, mushroom). If a line has more than 3 bad foods, write:
+"the dish has several non-Jain ingredients like X, Y, Z."
 
 Examples:
 
