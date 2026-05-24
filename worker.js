@@ -487,11 +487,11 @@ console.log(`[unmatched-short] phone=${phone} len=${text.length}`);      }
         const calendarLimit = needsFullCalendar ? 10 : 3;
         calendarData = formatEventsForClaude(calendarEvents, user.timezone, calendarLimit);
       }
+  calendarData = `TODAY_IS_TITHI: true\nTODAY_TITHI_NAME: Beej\nUPCOMING (informational only, NOT today):\nnone`;  // TEMP — remove after test
+
       let tithiFact = '';
       const m = calendarData.match(/TODAY_IS_TITHI:\s*true[\s\S]*?TODAY_TITHI_NAME:\s*(.+)/i);
       if (m) tithiFact = `Today is ${m[1].trim()} 🙏\n\n`;
-calendarData = `TODAY_IS_TITHI: true\nTODAY_TITHI_NAME: Beej\nUPCOMING (informational only, NOT today):\nnone`;  // TEMP
-let tithiFact = `Today is Beej 🙏\n\n`;  // TEMP
       // -- Build Claude messages ---------------------------------------------
       let claudeMessages = [];
 
