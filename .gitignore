@@ -1,8 +1,17 @@
+# macOS
+.DS_Store
+
+# Local secrets — never commit
+.dev.vars
+.env
+
+# Node
 node_modules/
+
+# Wrangler
 .wrangler/
 dist/
+
+# Logs
 *.log
 .git-sync.log
-.env
-.dev.vars
-.DS_Store
