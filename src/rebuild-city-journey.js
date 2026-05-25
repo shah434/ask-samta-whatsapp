@@ -110,17 +110,35 @@ export async function handleCityJourney(phone, text, user, intent, env, journey)
     if (pending.need === 'city_pick') {
       const n = /^[1-9][0-9]?$/.test(reply) ? parseInt(reply, 10) : null;
       const picked = n && pending.choices[n - 1];
-      if (!picked) {
-        const max = pending.choices.length;
-        const msg = n
-          ? `That number wasn't in the list. Reply with 1–${max}, or type the full city name 🙏`
-          : `Please reply with a number (1–${max}), or type the full city name with state or country 🙏`;
-        await sendMessage(phone, msg, env);
-        return true; // keep pending so they can retry
+      if (picked) {
+        await saveCity(phone, user, picked, env);
+        await journey.answer(phone, user, picked, pending.intent, env);
+        return true;
       }
-      await saveCity(phone, user, picked, env);
-      await journey.answer(phone, user, picked, pending.intent, env);
-      return true;
+      // Non-numeric or out-of-range — try resolving as a fresh city name.
+      // e.g. user typed "columbus, oh" or "new york" instead of picking a number.
+      if (!n && reply.length >= 2) {
+        const res = await resolveLocation(reply);
+        if (res.status === 'resolved') {
+          await saveCity(phone, user, res.place, env);
+          await journey.answer(phone, user, res.place, pending.intent, env);
+          return true;
+        }
+        if (res.status === 'ambiguous') {
+          const rec = serializePending({ need: 'city_pick', intent: pending.intent, choices: res.candidates });
+          await updateUser(phone, { pending_action: rec }, env);
+          user.pending_action = rec;
+          await sendMessage(phone, formatCandidatePicker(reply, res.candidates), env);
+          return true;
+        }
+      }
+      // Still couldn't resolve — ask again
+      const max = pending.choices.length;
+      const msg = n
+        ? `That number wasn't in the list. Reply with 1–${max}, or type the full city name 🙏`
+        : `I couldn't find that city. Reply with 1–${max}, or type the full city name with state or country 🙏`;
+      await sendMessage(phone, msg, env);
+      return true; // keep pending so they can retry
     }
 
     // Resume B: they typed a city name in answer to "which city?".
