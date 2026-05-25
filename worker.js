@@ -415,11 +415,7 @@ if (rbIntent.journey === 'tithi' && !user.city) {
               if (sunInfo) {
                 await saveResolvedCity(phone, user, picked, sunInfo, env, { pending_action: null });
                 if (cityPending.intent.journey === 'sunset') {
-                  const sd = formatSunDataForClaude(sunInfo);
-                  const t = sd.match(/Sunset:\s*([\d: APM]+)/i);
-                  await sendMessage(phone, t
-                    ? `Sunset today: ${t[1].trim().toLowerCase()} in ${sunInfo.city} 🌇`
-                    : `Got it — saved your city as ${sunInfo.city} 🙏`, env);
+                  await sendMessage(phone, `Sunset today: ${sunInfo.sunset} in ${sunInfo.city} 🌇`, env);
                 } else {
                   await sendMessage(phone, `Got it — saved your city as ${sunInfo.city} 🙏`, env);
                 }
