@@ -11,18 +11,13 @@ import { handleRebuildSunset, rebuildSunsetClaims } from './src/rebuild-sunset.j
 import { handleRebuildRestaurant, rebuildRestaurantClaims } from './src/rebuild-restaurant.js';
 import { handleCityUpdate, cityUpdateClaims } from './src/rebuild-city-update.js';
 import { handleProfileUpdate, profileUpdateClaims } from './src/rebuild-profile-update.js';
+import { handleRebuildTithi, tithiClaims } from './src/rebuild-tithi.js';
 import { getUser, createUser, updateUser, deleteUser } from './src/database.js';
 import { routeFallback } from './src/route-fallback.js';
 import { sendMessage, sendReaction, sendImage, getImageAsBase64 } from './src/whatsapp.js';
-import { callClaude } from './src/claude.js';
-import { identifyProduct, searchProductIngredients } from './src/search.js';
-import { stripTags, buildSystemPrompt, classifyQuery } from './src/utils.js';
-import {
-  DEFAULT_DIET,
-  getWelcomeMessage,
-  getStrictnessQuestion,
-} from './src/onboarding.js';
-import { getCalendarCached, getTodayAndUpcomingEvents, formatEventsForClaude } from './src/calendar.js';
+import { handleRebuildFood } from './src/rebuild-food.js';
+import { DEFAULT_DIET, getWelcomeMessage } from './src/onboarding.js';
+import { getCalendarCached, getTodayAndUpcomingEvents } from './src/calendar.js';
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
 // ────────────────────────────────────────────────────────────────────────────
@@ -38,20 +33,6 @@ const SILENT_DROP_TYPES = new Set([
   'reaction', 'system', 'interactive', 'button', 'unsupported', 'unknown'
 ]);
 
-const STRICTNESS_SENSITIVE = new Set([
-  'general', 'label_scan', 'restaurant', 'substitution', 'medicine'
-]);
-
-// Tithi CLAIM patterns — only fire the guard on assertive statements
-// about today, not on the mere mention of the word "tithi".
-const TITHI_CLAIM_PATTERNS = [
-  /\btoday\s+is\s+(a\s+)?(?:beej|bij|chaturdashi|chaumasi|paryushan(?:a)?|ekadashi|atthai|attham|chhath|punam|ashtami|nom|amavasya|purnima|fast day|tithi)\b/i,
-  /\b(?:it\s+is|it'?s)\s+(?:beej|bij|chaturdashi|chaumasi|paryushan(?:a)?|ekadashi|atthai|attham|chhath|punam|ashtami|nom|amavasya|purnima)\b/i,
-  /\bno food (?:should be eaten )?until tomorrow\b/i,
-  /\btoday\s+is\s+a\s+fast(?:ing)?\s+day\b/i,
-  /\(\s*(?:beej|bij|chaturdashi|chaumasi|paryushan(?:a)?|a fasting day)\s*\)/i,
-];
-
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
 // ────────────────────────────────────────────────────────────────────────────
@@ -66,10 +47,6 @@ async function hashPhone(phone) {
 
 function logTurn(u, fields) {
   console.log(`[turn] u=${u} ${Object.entries(fields).map(([k, v]) => `${k}=${v}`).join(' ')}`);
-}
-
-function isLikelyGreeting(text) {
-  return /^(hi|hello|hey|jai jinendra|namaste|hola)\b/i.test((text || '').trim());
 }
 
 function isBareGreeting(text) {
@@ -160,11 +137,11 @@ export default {
         }
       }
 
-      // -- Scale brake: per-user daily rate limit (50/day) -------------------
+      // -- Scale brake: per-user daily rate limit (100/day) ------------------
       const today = new Date().toISOString().slice(0, 10);
       const rlKey = `ratelimit:${phone}:${today}`;
       const count = parseInt(await env.KV.get(rlKey) || '0', 10);
-      if (count >= 50000) {
+      if (count >= 40000) {
         await sendMessage(phone, `You've hit today's limit 🙏 Back tomorrow.`, env);
         return new Response('OK', { status: 200 });
       }
@@ -260,15 +237,9 @@ export default {
         return new Response('OK', { status: 200 });
       }
 
- // -- REBUILD: new-foundation sunset path -------------------------------
-      // Runs AFTER the keyword checks above (delete me / help / greeting /
-      // pending-delete) so those commands always win over a pending sunset
-      // resume. classify() decides; only sunset is wired to the new path —
-      // everything else falls through to the old code below.
-      // rbIntent is hoisted so the strictness-ask block below can reference it.
-      let rbIntent = { journey: 'food', params: {}, prompt_blocks: [] };
+      // -- REBUILD: classify → journey handlers ----------------------------------
+      let rbIntent = classify(text, messageType === 'image');
       if (messageType === 'text') {
-        rbIntent = classify(text, false);
         if (rebuildSunsetClaims(user, rbIntent, text)) {
           const handled = await handleRebuildSunset(phone, text, user, rbIntent, env);
           if (handled) return new Response('OK', { status: 200 });
@@ -284,9 +255,15 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
           if (handled) return new Response('OK', { status: 200 });
         }
 
-        // -- Profile update: "make me strict", 1/2/3 reply to strictness ask --
+        // -- Profile update: "make me strict", "I'm BAPS", 1/2/3 reply ------
         if (profileUpdateClaims(user, rbIntent, text)) {
           const handled = await handleProfileUpdate(phone, text, user, rbIntent, env);
+          if (handled) return new Response('OK', { status: 200 });
+        }
+
+        // -- Tithi / calendar -------------------------------------------------
+        if (tithiClaims(user, rbIntent, text)) {
+          const handled = await handleRebuildTithi(phone, text, user, rbIntent, env);
           if (handled) return new Response('OK', { status: 200 });
         }
 
@@ -362,11 +339,9 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
             }
           }
         }
-        }
 
-        // -- Clear stale pending -----------------------------------------------
-        // If we reach here, no journey claimed this turn. Any pending_action is
-        // now stale (user moved on) — clear it so it doesn't haunt future turns.
+        // -- Clear stale pending ----------------------------------------------
+        // Reaching here means no journey claimed this turn → user moved on.
         const stalePending = readPending(user.pending_action);
         if (stalePending) {
           await updateUser(phone, { pending_action: null }, env);
@@ -374,231 +349,10 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
         }
       }
 
-      let googleResults = [];
-
-      // -- Classify query ----------------------------------------------------
-      const queryTypes = classifyQuery(text, messageType === 'image');
-
-      if (queryTypes.length === 1 && queryTypes[0] === 'general' && text && text.length < 30) {
-console.log(`[unmatched-short] u=${u} len=${text.length}`);    }
-
-      const lastBotReply = (user.history_1_a || '').toLowerCase();
-      const isShortReply = text.trim().length < 20;
-      const isReplyToFastMenu = isShortReply && /fast|upvas|ekasan|ayambil|chauvihar|tivihar|atthai|porsi|biyasan|navkarsi/i.test(lastBotReply);
-      if (isReplyToFastMenu && !queryTypes.includes('fasting')) {
-        queryTypes.push('fasting');
-      }
-
-      // -- Calendar — Jain only, gated on onboarding completion --------------
-      let calendarData = '';
-      if (user.community === 'jain') {
-        const needsFullCalendar = queryTypes.includes('fasting')
-          || queryTypes.includes('calendar')
-          || /paryushana|coming|upcoming|next/i.test(text);
-        const calendarLimit = needsFullCalendar ? 10 : 3;
-        calendarData = formatEventsForClaude(calendarEvents, user.timezone, calendarLimit);
-      }
-
-      let tithiFact = '';
-      const m = calendarData.match(/TODAY_IS_TITHI:\s*true[\s\S]*?TODAY_TITHI_NAME:\s*(.+)/i);
-      if (m) tithiFact = `Today is ${m[1].trim()} 🙏\n\n`;
-// Tithi question + today is not a tithi → answer directly, skip Claude.
-      const isTithiQ = queryTypes.includes('calendar') && /\btithi\b|fast day|special day/i.test(text);
-      const todayIsTithi = /TODAY_IS_TITHI:\s*true/i.test(calendarData);
-      if (isTithiQ && !todayIsTithi && user.community === 'jain') {
-        await sendMessage(phone, `Today's not a special day 🙏 Let me know if you're thinking of starting a fast.`, env);
-        return new Response('OK', { status: 200 });
-      }
-
-      
-      // -- Build Claude messages ---------------------------------------------
-      let claudeMessages = [];
-      let searchSnippets = null;   // Branch B search context for system prompt
-      let isLabel = true;          // Safe default — Branch A if identification fails
-      let productName = null;
-      let scanBranch = null;       // 'A' or 'B' — for scan log
-
-      if (messageType === 'image') {
-        try {
-          const { base64, mimeType } = await imagePromise;
-          console.log(`[perf] image_ready=${Date.now() - t0}ms`);
-
-          // -- Stage 2: identify label vs product front ----------------------
-          ({ isLabel, productName } = await identifyProduct(base64, mimeType, env));
-          console.log(`[image] classify isLabel=${isLabel} product="${productName}" latency=${Date.now() - t0}ms`);
-
-          if (isLabel) {
-            // -- Branch A: ingredient list visible — send image to Claude ----
-            scanBranch = 'A';
-            console.log(`[image] branch=A maxTokens=400`);
-            claudeMessages = [{
-              role: 'user',
-              content: [
-                {
-                  type: 'image',
-                  source: { type: 'base64', media_type: mimeType, data: base64 }
-                },
-                {
-                  type: 'text',
-                  text: text || 'Please scan this food label and check if it is safe for my diet.'
-                }
-              ]
-            }];
-
-          } else {
-            // -- Branch B: product front — search Brave for ingredients ------
-            scanBranch = 'B';
-            const snippets = productName
-              ? await searchProductIngredients(productName, env)
-              : null;
-
-            console.log(`[image] branch=B snippets=${snippets ? 'found' : 'null'} product="${productName}"`);
-
-            if (!snippets) {
-              console.log(`[image] branch=B fallback=ask_for_label product="${productName}"`);
-              await sendMessage(
-                phone,
-                `I couldn't find ingredient info for ${productName || 'this product'} online. Can you send a photo of the back label or ingredients panel? 🙏`,
-                env
-              );
-              return new Response('OK', { status: 200 });
-            }
-
-            // Inject snippets into system prompt (passed to buildSystemPrompt below)
-            searchSnippets =
-              `PRODUCT SEARCH RESULTS — ${productName}\n` +
-              `The user sent a photo of the product front (no ingredient list visible).\n` +
-              `The following web snippets were retrieved to identify ingredients:\n\n` +
-              `${snippets}\n\n` +
-              `Use these snippets to identify the likely ingredients. ` +
-              `If the snippets do not contain a clear ingredient list, say so and ask the user to send the back label. ` +
-              `Do not invent ingredients not mentioned in the snippets.`;
-
-            // Text-only call — no image needed when we have search data
-            claudeMessages = [{
-              role: 'user',
-              content: text || `Please check if ${productName} is safe for my diet based on the search results provided.`
-            }];
-          }
-
-        } catch (err) {
-          console.log('Image processing error:', err.message);
-          await sendMessage(
-            phone,
-            'I could not process that image. Please try a clearer photo or type out the ingredients list.',
-            env
-          );
-          return new Response('OK', { status: 200 });
-        }
-      } else {
-        claudeMessages = [{ role: 'user', content: text }];
-      }
-
-      // -- System prompt + Claude call ---------------------------------------
-      // sunData is always empty now — sunset queries are handled by rebuild-sunset
-      // before reaching this point. Kept as '' for buildSystemPrompt signature.
-      const system = buildSystemPrompt(user, googleResults, calendarData, '', queryTypes, searchSnippets);
-      const maxTokens = messageType === 'image' && isLabel ? 400 : 250;
-      console.log(`[perf] claude_start=${Date.now() - t0}ms`);
-      const response = await callClaude(claudeMessages, system, env, maxTokens);
-      console.log(`[perf] claude_done=${Date.now() - t0}ms`);
-
-      let cleanResponse = stripTags(response);
-      cleanResponse = cleanResponse
-        .replace(/TODAY_IS_TITHI:\s*(true|false)/gi, '')
-        .replace(/TODAY_TITHI_NAME:.*$/gim, '')
-        .trim();
-
-      // -- Short-term scan log (tuning aid — remove once behavior is stable) -
-      if (messageType === 'image' && scanBranch) {
-        try {
-          const scanLog = {
-            timestamp: new Date().toISOString(),
-            productName: productName || null,
-            branch: scanBranch,
-            snippetsFound: !!searchSnippets,
-            snippets: searchSnippets || null,
-            response: cleanResponse,
-            latencyMs: Date.now() - t0
-          };
-          await env.KV.put(
-            `log:image:${scanLog.timestamp}`,
-            JSON.stringify(scanLog),
-            { expirationTtl: 2592000 } // 30 days
-          );
-        } catch (logErr) {
-          console.log('[image] scan log write failed:', logErr.message);
-        }
-      }
-
-      // -- Tithi-claim guard -------------------------------------------------
-      const calendarHadToday = /TODAY_IS_TITHI:\s*true/i.test(calendarData);
-      const claimsTithiToday = TITHI_CLAIM_PATTERNS.some(p => p.test(cleanResponse));
-      if (!calendarHadToday && claimsTithiToday) {
-        console.log(`[guard] stripped_tithi_claim u=${u}`);
-        const sentences = cleanResponse.split(/(?<=[.!?])\s+/);
-        cleanResponse = sentences
-          .filter(s => !TITHI_CLAIM_PATTERNS.some(p => p.test(s)))
-          .join(' ')
-          .replace(/\s+/g, ' ')
-          .trim();
-        if (!cleanResponse) {
-          cleanResponse = "Let me know what you'd like to check 🙏";
-        }
-      }
-
-      // -- Strictness ask append ---------------------------------------------
-      cleanResponse = cleanResponse.replace(/\[ASK_STRICTNESS\]/gi, '').trim();
-
-      const isFasting = queryTypes.includes('fasting');
-      const isStrictnessSensitive = queryTypes.some(t => STRICTNESS_SENSITIVE.has(t));
-      const levelsShown = [/\bif strict\b/i, /\bif moderate\b/i, /\bif flexible\b/i]
-        .filter(re => re.test(cleanResponse)).length;
-      const hasDualVerdict = levelsShown > 1;
-      const alreadyAskedStrictness = readPending(user.pending_action)?.need === 'strictness';
-      const needsStrictnessAsk = !user.strictness
-        && !alreadyAskedStrictness
-        && isStrictnessSensitive
-        && !isFasting
-        && !isLikelyGreeting(text)
-        && hasDualVerdict;
-
-      if (needsStrictnessAsk) {
-        cleanResponse += '\n\n' + getStrictnessQuestion();
-        cleanResponse += '\n\n💡 Type *help* anytime to see what else I can do.';
-        const rec = serializePending({ need: 'strictness', intent: rbIntent });
-        if (rec) await updateUser(phone, { pending_action: rec }, env);
-      }
-
-      // -- Send response -----------------------------------------------------
-    // -- Send response -----------------------------------------------------
-      if (!cleanResponse || !cleanResponse.trim()) {
-        console.log(`[empty_response] u=${u} types=${queryTypes.join(',')}`);
-        cleanResponse = "Let me know what you'd like to check 🙏";
-      }
-      logTurn(u, {
-        journey: 'food',
-        types: queryTypes.join(',') || 'none',
-        ask_strictness: needsStrictnessAsk,
-        tithi: !!tithiFact,
-        img: messageType === 'image',
+      // -- Food / image catch-all --------------------------------------------
+      await handleRebuildFood(phone, text, user, rbIntent, env, {
+        messageType, imagePromise, calendarEvents, t0, ctx,
       });
-      await sendMessage(phone, tithiFact + cleanResponse, env);
-      console.log(`[perf] sent=${Date.now() - t0}ms TOTAL`);
-
-      // -- Deferred Supabase write -------------------------------------------
-      ctx.waitUntil((async () => {
-        await updateUser(phone, {
-          history_1_q: text,
-          history_1_a: cleanResponse,
-          history_2_q: user.history_1_q || '',
-          history_2_a: user.history_1_a || '',
-          history_3_q: user.history_2_q || '',
-          history_3_a: user.history_2_a || '',
-          message_count: (user.message_count || 0) + 1,
-        }, env);
-      })());
-
       return new Response('OK', { status: 200 });
 
     } catch (err) {

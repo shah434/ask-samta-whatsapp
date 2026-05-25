@@ -60,7 +60,7 @@ export function classifyQuery(text, hasImage) {
 }
 
 export function stripTags(text) {
-  return text.trim();
+  return (text || '').trim();
 }
 
 export function buildSystemPrompt(user, googleResults, calendarData, sunData, queryTypes, searchSnippets = null) {

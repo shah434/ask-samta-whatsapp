@@ -8,15 +8,13 @@
 //
 //   intent = {
 //     journey:  'food' | 'tithi' | 'sunset' | 'restaurant' | 'pachkhan'
-//             | 'greeting' | 'account' | 'offtopic' | 'city_update' | 'profile_update',
+//             | 'greeting' | 'account' | 'offtopic',
 //     params: {
-//       food_text?:       string,
-//       has_image?:       boolean,
-//       city_raw?:        string,
-//       fast_term?:       string,             // canonical fast category, from detectFastTerm
-//       sun_kind?:        'sunset' | 'sunrise',
-//       strictness_level?: 'strict' | 'moderate' | 'flexible',
-//       community?:        'jain' | 'baps',
+//       food_text?:  string,
+//       has_image?:  boolean,
+//       city_raw?:   string,
+//       fast_term?:  string,    // canonical fast category, from detectFastTerm
+//       sun_kind?:   'sunset' | 'sunrise',
 //     },
 //     prompt_blocks: string[]    // derived; which USE_CASE_* blocks to load
 //   }
@@ -71,7 +69,7 @@ const RE_GREETING = /^(hi|hello|hey|hiya|yo|namaste|namaskar|jai jinendra|jai sw
 const RE_ACCOUNT  = /\b(delete me|delete my account|delete my data|remove my data|remove me|unsubscribe|stop using|forget me|opt out|wipe my)\b/i;
 const RE_CITY_STATEMENT = /^(?:my city is|i live in|i'?m in|set my city to|change my city to|update my city to)\s+([a-zA-Z][a-zA-Z\s,]+?)[?.!]*$/i;
 const RE_STRICTNESS_UPDATE = /\b(?:make me|set me to|i'?m|i am|change (?:my strictness )?to|switch (?:me )?to|update (?:my )?strictness to)\s+(strict|moderate|flexible)\b/i;
-// Anchored at both ends so "I'm Jain, can I eat X?" (food question) doesn't fire.
+// Anchored at both ends so "I'm Jain, can I eat X?" doesn't fire.
 const RE_COMMUNITY_UPDATE = /^(?:i'?m|i am|make me|set (?:my community )?to|switch (?:my community|me) to|change (?:my community|me) to|i follow)\s+(?:a\s+)?(baps|jain)[?.!]*$/i;
 
 // Genuinely-unrelated signals. Deliberately conservative — we would rather
@@ -226,17 +224,16 @@ export function classify(message, hasImage = false) {
   }
 
   // 5c. PROFILE UPDATE — explicit strictness or community declaration.
-  //     Placed after city-update so "I'm in Chicago" doesn't fire this.
   if (!isSunset && !isRestaurant && !isCalendar) {
     const strictnessStmt = text.match(RE_STRICTNESS_UPDATE);
-    if (strictnessStmt && strictnessStmt[1]) {
+    if (strictnessStmt?.[1]) {
       intent.journey = 'profile_update';
       intent.params.strictness_level = strictnessStmt[1].toLowerCase();
       intent.prompt_blocks = [];
       return intent;
     }
     const communityStmt = text.match(RE_COMMUNITY_UPDATE);
-    if (communityStmt && communityStmt[1]) {
+    if (communityStmt?.[1]) {
       intent.journey = 'profile_update';
       intent.params.community = communityStmt[1].toLowerCase();
       intent.prompt_blocks = [];

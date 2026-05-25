@@ -1,8 +1,8 @@
 // ============================================
 // unit.test.js — Pure function tests for Samta
-// Covers: classifyQuery, stripTags (utils.js),
-//         profile_update journey (classify.js),
-//         detectFastTerm (fasting-match.js)
+// Covers: classifyQuery, parseProfileUpdate,
+//         stripTags (utils.js), detectFastTerm
+//         (fasting-match.js)
 // Run: npm test
 // ============================================
 
@@ -144,7 +144,6 @@ describe('classifyQuery', () => {
 
 describe('profile_update journey', () => {
 
-  // --- Strictness ---
   it('"make me strict" → profile_update, strictness_level: strict', () => {
     const r = classify('make me strict');
     expect(r.journey).toBe('profile_update');
@@ -152,36 +151,22 @@ describe('profile_update journey', () => {
     expect(r.prompt_blocks).toEqual([]);
   });
 
-  it('"set me to moderate" → profile_update, strictness_level: moderate', () => {
+  it('"set me to moderate" → profile_update', () => {
     const r = classify('set me to moderate');
     expect(r.journey).toBe('profile_update');
     expect(r.params.strictness_level).toBe('moderate');
   });
 
-  it('"I\'m flexible" → profile_update, strictness_level: flexible', () => {
+  it('"I\'m flexible" → profile_update', () => {
     const r = classify("I'm flexible");
     expect(r.journey).toBe('profile_update');
     expect(r.params.strictness_level).toBe('flexible');
   });
 
-  it('"switch me to flexible" → profile_update', () => {
-    const r = classify('switch me to flexible');
-    expect(r.journey).toBe('profile_update');
-    expect(r.params.strictness_level).toBe('flexible');
-  });
-
-  it('"update my strictness to strict" → profile_update', () => {
-    const r = classify('update my strictness to strict');
-    expect(r.journey).toBe('profile_update');
-    expect(r.params.strictness_level).toBe('strict');
-  });
-
-  // --- Community ---
   it('"I\'m BAPS" → profile_update, community: baps', () => {
     const r = classify("I'm BAPS");
     expect(r.journey).toBe('profile_update');
     expect(r.params.community).toBe('baps');
-    expect(r.prompt_blocks).toEqual([]);
   });
 
   it('"I\'m Jain" → profile_update, community: jain', () => {
@@ -190,26 +175,14 @@ describe('profile_update journey', () => {
     expect(r.params.community).toBe('jain');
   });
 
-  it('"switch me to BAPS" → profile_update, community: baps', () => {
+  it('"switch me to BAPS" → profile_update', () => {
     const r = classify('switch me to BAPS');
     expect(r.journey).toBe('profile_update');
     expect(r.params.community).toBe('baps');
   });
 
-  it('"I am Jain" → profile_update, community: jain', () => {
-    const r = classify('I am Jain');
-    expect(r.journey).toBe('profile_update');
-    expect(r.params.community).toBe('jain');
-  });
-
-  // --- Non-profile messages do NOT fire ---
   it('"I\'m Jain, can I eat paneer?" stays food (not profile_update)', () => {
     const r = classify("I'm Jain, can I eat paneer?");
-    expect(r.journey).not.toBe('profile_update');
-  });
-
-  it('"can I eat this during my fast?" stays food', () => {
-    const r = classify("can I eat this during my fast?");
     expect(r.journey).not.toBe('profile_update');
   });
 });

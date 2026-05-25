@@ -53,18 +53,24 @@ export async function getTodayAndUpcomingEvents() {
 
     const today = todayInTimezone(CALENDAR_TZ);
 
+    // Start 1 day before NY "today" so users in timezones behind CALENDAR_TZ
+    // (e.g. Pacific at 10 PM when NY has already rolled to tomorrow) still
+    // find their "today" event in the cache.
+    const windowStart = new Date(today);
+    windowStart.setDate(windowStart.getDate() - 1);
+
     const upcoming = new Date(today);
     upcoming.setDate(upcoming.getDate() + 30);
 
     const events = parseICS(icsText);
 
     const relevantEvents = events.filter(event => {
-      return event.date >= today && event.date <= upcoming;
+      return event.date >= windowStart && event.date <= upcoming;
     });
 
     relevantEvents.sort((a, b) => a.date - b.date);
 
-    return relevantEvents.slice(0, 10);
+    return relevantEvents.slice(0, 12); // +2 to absorb the extra day
 
   } catch (err) {
     console.log('Calendar fetch error:', err.message);

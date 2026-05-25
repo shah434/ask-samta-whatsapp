@@ -43,11 +43,6 @@ const US_STATES = {
   wi:'Wisconsin',wy:'Wyoming',dc:'District of Columbia',
 };
 
-// Look up a 2-letter US state code → full state name. Returns null if not found.
-export function expandStateCode(code) {
-  return US_STATES[(code || '').toLowerCase()] || null;
-}
-
 export async function resolveLocation(cityRaw) {
   // --- missing: nothing usable to geocode -----------------------------------
   if (cityRaw == null) return { status: 'missing' };
