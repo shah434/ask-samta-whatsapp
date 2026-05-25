@@ -40,7 +40,7 @@ import { updateUser } from './database.js';
 //   - incoming intent is NOT a city-journey (bare reply) -> the pending record
 //     governs: only the pending journey's gate claims it
 //   - no pending + not a fresh city-journey -> nobody claims (old path)
-const CITY_JOURNEYS = new Set(['sunset', 'restaurant']);
+const CITY_JOURNEYS = new Set(['sunset', 'restaurant', 'city_update']);
 export function cityJourneyClaims(user, intent, journeyName, text) {
   // Fresh city-journey request (e.g. "sunset in tokyo") always wins.
   if (CITY_JOURNEYS.has(intent.journey)) {
@@ -96,8 +96,6 @@ function placeFromSaved(user) {
 // The shared handler. `journey` is { name, askCityPrompt, answer }.
 // Returns true if it handled the turn (caller must then return).
 export async function handleCityJourney(phone, text, user, intent, env, journey) {
-    await sendMessage(phone, `DBG text="${text}" journey=${intent.journey} need=${readPending(user.pending_action)?.need} cityraw=${intent.params.city_raw}`, env);
-
   const pending = readPending(user.pending_action);
 
   // ---- RESUME: we previously asked this user for a city ----------------------

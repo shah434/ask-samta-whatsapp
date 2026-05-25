@@ -9,6 +9,7 @@ import { rulesFor, rulesForNumber, FAST_MENU } from './src/fasting-rules.js';
 import { serializePending } from './src/pending.js';
 import { handleRebuildSunset, rebuildSunsetClaims } from './src/rebuild-sunset.js';
 import { handleRebuildRestaurant, rebuildRestaurantClaims } from './src/rebuild-restaurant.js';
+import { handleCityUpdate, cityUpdateClaims } from './src/rebuild-city-update.js';
 import { getUser, createUser, updateUser, deleteUser, setFlagKV } from './src/database.js';
 import { routeFallback } from './src/route-fallback.js';
 import { sendMessage, sendReaction, sendImage, getImageAsBase64 } from './src/whatsapp.js';
@@ -308,28 +309,10 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
           if (handled) return new Response('OK', { status: 200 });
         }
 
-// -- City update: bare profile statement ("my city is brooklyn") ---
-        if (rbIntent.journey === 'city_update' && rbIntent.params.city_raw) {
-          const geo = await geocodeCity(rbIntent.params.city_raw);
-          if (geo.status === 'unique') {
-            const sunInfo = await getSunForPlace(geo.place);
-            if (sunInfo) {
-              await saveResolvedCity(phone, user, geo.place, sunInfo, env);
-              await sendMessage(phone, `Got it — saved your city as ${sunInfo.city} 🙏`, env);
-              return new Response('OK', { status: 200 });
-            }
-          }
-          if (geo.status === 'ambiguous') {
-            const lines = geo.candidates.map((c, i) =>
-              `${i + 1} — ${c.name}${c.admin1 ? ', ' + c.admin1 : ''}, ${c.country}`
-            ).join('\n');
-            const rec = serializePending({ need: 'city_pick', intent: rbIntent, choices: geo.candidates });
-            await updateUser(phone, { pending_action: rec }, env);
-            await sendMessage(phone, `Which one?\n\n${lines}\n\nReply with the number.`, env);
-            return new Response('OK', { status: 200 });
-          }
-          await sendMessage(phone, `I couldn't find that city. Try the full name with state or country 🙏`, env);
-          return new Response('OK', { status: 200 });
+        // -- City update: "my city is X", "I live in X" etc. ----------------
+        if (cityUpdateClaims(user, rbIntent, text)) {
+          const handled = await handleCityUpdate(phone, text, user, rbIntent, env);
+          if (handled) return new Response('OK', { status: 200 });
         }
 
         // -- Tithi question but no saved city → ask for it via pending_action
