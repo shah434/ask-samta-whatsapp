@@ -15,37 +15,44 @@
  *
  * placeObj has: name, latitude, longitude, timezone, admin1, country
  */
+// US state code → admin1 name (Open-Meteo returns full state names, not codes)
+const US_STATES = {
+  al:'Alabama',ak:'Alaska',az:'Arizona',ar:'Arkansas',ca:'California',
+  co:'Colorado',ct:'Connecticut',de:'Delaware',fl:'Florida',ga:'Georgia',
+  hi:'Hawaii',id:'Idaho',il:'Illinois',in:'Indiana',ia:'Iowa',ks:'Kansas',
+  ky:'Kentucky',la:'Louisiana',me:'Maine',md:'Maryland',ma:'Massachusetts',
+  mi:'Michigan',mn:'Minnesota',ms:'Mississippi',mo:'Missouri',mt:'Montana',
+  ne:'Nebraska',nv:'Nevada',nh:'New Hampshire',nj:'New Jersey',nm:'New Mexico',
+  ny:'New York',nc:'North Carolina',nd:'North Dakota',oh:'Ohio',ok:'Oklahoma',
+  or:'Oregon',pa:'Pennsylvania',ri:'Rhode Island',sc:'South Carolina',
+  sd:'South Dakota',tn:'Tennessee',tx:'Texas',ut:'Utah',vt:'Vermont',
+  va:'Virginia',wa:'Washington',wv:'West Virginia',wi:'Wisconsin',wy:'Wyoming',
+  dc:'District of Columbia'
+};
+
 export async function geocodeCity(city) {
   try {
+    // Capture a trailing 2-letter qualifier (state or country code).
+    const qMatch = city.match(/,\s*([A-Za-z]{2})\s*$/);
+    const qCode = qMatch ? qMatch[1].toLowerCase() : null;
+    const stateName = qCode ? US_STATES[qCode] : null;
+
     const cleanCity = city
-      .replace(/,\s*[A-Z]{2}$/i, '')   // strip ", NY" style state codes
+      .replace(/,\s*[A-Za-z]{2}\s*$/i, '')
       .replace(/,/g, ' ')
       .trim();
 
-    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cleanCity)}&count=5&language=en&format=json`;
+    const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cleanCity)}&count=10&language=en&format=json`;
     const res = await fetch(url);
     const data = await res.json();
-    const results = data.results || [];
+    let results = data.results || [];
 
     if (results.length === 0) return { status: 'not_found' };
 
-    // Prefer exact name matches so "San Jose" doesn't surface
-    // "San Jose del Cabo" or "San Joseph" alongside the real options.
-    const exact = results.filter(
-      r => r.name.toLowerCase() === cleanCity.toLowerCase()
-    );
-    const candidates = exact.length > 0 ? exact : results;
-
-    if (candidates.length === 1) {
-      return { status: 'unique', place: candidates[0] };
-    }
-    return { status: 'ambiguous', candidates: candidates.slice(0, 4) };
-
-  } catch (err) {
-    console.log('geocodeCity error:', err.message);
-    return { status: 'not_found' };
-  }
-}
+    // Narrow by qualifier. Try US state first (handles the IN = Indiana/India
+    // collision: a real Indiana city matches here; an Indian city won't, and
+    // falls through to the country-code filter below).
+    if
 
 /**
  * Fetch sunrise/sunset for an already-resolved place object.
