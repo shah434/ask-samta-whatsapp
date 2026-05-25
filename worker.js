@@ -639,22 +639,7 @@ console.log(`[unmatched-short] u=${u} len=${text.length}`);    }
           if (sunInfo) {
             await saveResolvedCity(phone, user, geo.place, sunInfo, env);
           }
-        } else if (geo.status === 'ambiguous') {
-          const lines = geo.candidates.map((c, i) =>
-            `${i + 1} — ${c.name}${c.admin1 ? ', ' + c.admin1 : ''}, ${c.country}`
-          ).join('\n');
-          await updateUser(phone, {
-            pending_city_choices: JSON.stringify(geo.candidates),
-            pending_tithi_city_ask: true,
-            history_1_q: text
-          }, env);
-          await sendMessage(
-            phone,
-            `Before I save that — I found a few places called "${updates.city}". Which one?\n\n${lines}\n\nReply with the number.`,
-            env
-          );
-          return new Response('OK', { status: 200 });
-        }
+        } 
         // status === 'not_found' — silently skip the save
       }
 
