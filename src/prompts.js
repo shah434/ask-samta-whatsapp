@@ -40,7 +40,9 @@ RULES:
 
 FOLLOW-UP OFFERS (one max, only when useful):
 uncertain/not safe + packaged food: offer label scan
-not safe + label scan: offer substitution
+not safe + label scan: give label-reading criteria for a safe alternative —
+  name the exact ingredients/markers to avoid on any replacement product.
+  Do NOT suggest specific brands. End with "scan the label before buying".
 fasting + no observance: BAPS offer Ekadashi check, Jain offer tithi check
 uncertain + brand mentioned: offer label scan
 medicine + not safe: offer pharmacist script
@@ -433,7 +435,13 @@ Format:
 1. Overall verdict line — SAFE / NOT SAFE / UNCERTAIN + product name and brand
 2. List only flagged ingredients, one per line, with one-phrase reason.
    Skip every ingredient that is safe — do not mention it.
-3. One closing line only (offer substitution, ask for clearer photo, or affirming touch).
+3. One closing line only:
+   NOT SAFE: give one short label-reading tip based on what specifically failed —
+   name the exact ingredients/markers to avoid when looking for an alternative
+   (e.g. "For a safe swap, look for products with no E471, natural flavors, or
+   honey — and scan the label before buying"). Do NOT suggest specific brands.
+   UNCERTAIN: offer a label scan or ask for a clearer photo.
+   SAFE: brief affirming touch.
 
 A clean product: 2 lines total.
 A product with concerns: verdict + one line per flag + closing.
