@@ -46,9 +46,13 @@ export function cityJourneyClaims(user, intent, journeyName, text) {
   if (CITY_JOURNEYS.has(intent.journey)) {
     return intent.journey === journeyName;
   }
-  // Otherwise claim ONLY if this journey is pending AND the message is a
-  // bare reply to it. A non-bare message is a fresh request — don't claim,
-  // and abandon the pending below (handled in handleCityJourney).
+  // If classify() returned a real journey (not the 'food' default), the user
+  // typed a recognizable request ("fasting", "tithi", etc.) — NOT a bare reply
+  // to a city picker. Only unclassified messages (defaulting to 'food') are
+  // candidates for resuming a pending city flow.
+  if (intent.journey !== 'food') return false;
+
+  // Claim ONLY if this journey is pending AND the message is a bare reply.
   const pending = readPending(user.pending_action);
   if (!pending || pending.intent.journey !== journeyName) return false;
   return isBareReply(text);

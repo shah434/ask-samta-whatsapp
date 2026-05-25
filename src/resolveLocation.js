@@ -28,16 +28,35 @@
 const GEOCODE_URL = 'https://geocoding-api.open-meteo.com/v1/search';
 const NON_CITIES = ['me', 'here', 'my area', 'nearby', 'near me'];
 
+// US state codes → full admin1 names (used to narrow ambiguous results).
+const US_STATES = {
+  al:'Alabama',ak:'Alaska',az:'Arizona',ar:'Arkansas',ca:'California',
+  co:'Colorado',ct:'Connecticut',de:'Delaware',fl:'Florida',ga:'Georgia',
+  hi:'Hawaii',id:'Idaho',il:'Illinois',in:'Indiana',ia:'Iowa',ks:'Kansas',
+  ky:'Kentucky',la:'Louisiana',me:'Maine',md:'Maryland',ma:'Massachusetts',
+  mi:'Michigan',mn:'Minnesota',ms:'Mississippi',mo:'Missouri',mt:'Montana',
+  ne:'Nebraska',nv:'Nevada',nh:'New Hampshire',nj:'New Jersey',
+  nm:'New Mexico',ny:'New York',nc:'North Carolina',nd:'North Dakota',
+  oh:'Ohio',ok:'Oklahoma',or:'Oregon',pa:'Pennsylvania',ri:'Rhode Island',
+  sc:'South Carolina',sd:'South Dakota',tn:'Tennessee',tx:'Texas',ut:'Utah',
+  vt:'Vermont',va:'Virginia',wa:'Washington',wv:'West Virginia',
+  wi:'Wisconsin',wy:'Wyoming',dc:'District of Columbia',
+};
+
 export async function resolveLocation(cityRaw) {
   // --- missing: nothing usable to geocode -----------------------------------
-  // Covers null/undefined, empty/whitespace, too-short or too-long junk, and
-  // the "near me" non-cities that must never reach the geocoder.
   if (cityRaw == null) return { status: 'missing' };
   const raw = String(cityRaw).trim();
   if (raw.length < 2 || raw.length > 50) return { status: 'missing' };
   if (NON_CITIES.includes(raw.toLowerCase())) return { status: 'missing' };
 
   try {
+    // Extract a trailing 2-letter state/region code BEFORE stripping it,
+    // so we can use it to narrow ambiguous results after geocoding.
+    const stateMatch = raw.match(/[,\s]+([A-Z]{2})$/i);
+    const stateCode = stateMatch ? stateMatch[1].toLowerCase() : null;
+    const stateName = stateCode ? (US_STATES[stateCode] || null) : null;
+
     const cleanCity = raw
       .replace(/,\s*[A-Z]{2}$/i, '')   // strip ", NY" style 2-letter state codes
       .replace(/\s+[A-Z]{2}$/i, '')    // strip " NY" style (no comma) — e.g. "columbus oh"
@@ -56,7 +75,16 @@ export async function resolveLocation(cityRaw) {
     const exact = results.filter(
       r => r.name.toLowerCase() === cleanCity.toLowerCase()
     );
-    const candidates = exact.length > 0 ? exact : results;
+    let candidates = exact.length > 0 ? exact : results;
+
+    // If the user supplied a state code ("columbus oh"), use it to narrow
+    // the candidates by matching admin1 against the full state name.
+    if (stateName && candidates.length > 1) {
+      const stateFiltered = candidates.filter(
+        r => r.admin1 && r.admin1.toLowerCase() === stateName.toLowerCase()
+      );
+      if (stateFiltered.length > 0) candidates = stateFiltered;
+    }
 
     if (candidates.length === 1) {
       return { status: 'resolved', place: toPlace(candidates[0]) };
