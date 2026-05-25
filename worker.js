@@ -414,7 +414,7 @@ if (rbIntent.journey === 'tithi' && !user.city) {
               const sunInfo = await getSunForPlace(picked);
               if (sunInfo) {
                 await saveResolvedCity(phone, user, picked, sunInfo, env, { pending_action: null });
-                if (cityPending.intent.journey === 'sunset') {
+               if (cityPending.intent.journey === 'sunset') {
                   await sendMessage(phone, `Sunset today: ${sunInfo.sunset} in ${sunInfo.city} 🌇`, env);
                 } else {
                   await sendMessage(phone, `Got it — saved your city as ${sunInfo.city} 🙏`, env);
