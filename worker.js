@@ -391,9 +391,11 @@ console.log(`[unmatched-short] u=${u} len=${text.length}`);    }
       const m = calendarData.match(/TODAY_IS_TITHI:\s*true[\s\S]*?TODAY_TITHI_NAME:\s*(.+)/i);
       if (m) tithiFact = `Today is ${m[1].trim()} 🙏\n\n`;
 // Tithi question + today is not a tithi → answer directly, skip Claude.
+      // But only if the user is asking about TODAY — not "this week" / "upcoming".
       const isTithiQ = queryTypes.includes('calendar') && /\btithi\b|fast day|special day/i.test(text);
       const todayIsTithi = /TODAY_IS_TITHI:\s*true/i.test(calendarData);
-      if (isTithiQ && !todayIsTithi && user.community === 'jain') {
+      const asksForward = /\b(this week|next week|upcoming|soon|coming up|any (tithi|fast)|next (few|couple))\b/i.test(text);
+      if (isTithiQ && !todayIsTithi && !asksForward && user.community === 'jain') {
         await sendMessage(phone, `Today's not a special day 🙏 Let me know if you're thinking of starting a fast.`, env);
         return new Response('OK', { status: 200 });
       }
