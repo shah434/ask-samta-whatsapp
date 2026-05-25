@@ -422,19 +422,44 @@ if (rbIntent.journey === 'tithi' && !user.city) {
         {
           const fastPending = readPending(user.pending_action);
           const reply = text.trim();
+
           if (fastPending && fastPending.need === 'fast_pick') {
-            ...
-        
-        // Sunset didn't claim it → this is a fresh message. Abandon any stale
-        // city pending so a later "1" or city name can't resume a dead flow.
-        if (user.pending_action) {
-          const p = readPending(user.pending_action);
-          if (p && (p.need === 'city' || p.need === 'city_pick')) {
-            await updateUser(phone, { pending_action: null }, env);
-            user.pending_action = null;
+            if (/^[1-7]$/.test(reply)) {
+              const rules = rulesForNumber(parseInt(reply, 10));
+              if (rules) {
+                await updateUser(phone, { pending_action: null }, env);
+                await sendMessage(phone, rules, env);
+                return new Response('OK', { status: 200 });
+              }
+            }
+            if (rbIntent.params.fast_term && rbIntent.params.fast_term !== 'pachkhan_general') {
+              const rules = rulesFor(rbIntent.params.fast_term);
+              if (rules) {
+                await updateUser(phone, { pending_action: null }, env);
+                await sendMessage(phone, rules, env);
+                return new Response('OK', { status: 200 });
+              }
+            }
+            if (reply === '8') {
+              await updateUser(phone, { pending_action: null }, env);
+            }
+          }
+
+          if (rbIntent.params.fast_term) {
+            const ft = rbIntent.params.fast_term;
+            if (ft === 'pachkhan_general') {
+              const rec = serializePending({ need: 'fast_pick', intent: rbIntent });
+              await updateUser(phone, { pending_action: rec }, env);
+              await sendMessage(phone, FAST_MENU, env);
+              return new Response('OK', { status: 200 });
+            }
+            const rules = rulesFor(ft);
+            if (rules) {
+              await sendMessage(phone, rules, env);
+              return new Response('OK', { status: 200 });
+            }
           }
         }
-      }
             
       // -- Pending strictness reply check ------------------------------------
       if (user.pending_strictness_ask && messageType === 'text') {
