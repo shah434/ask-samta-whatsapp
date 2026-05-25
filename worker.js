@@ -369,12 +369,41 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
           }
         }
 
+// -- City resume: typed city name answering a need:'city' prompt -----
+        {
+          const cp = readPending(user.pending_action);
+          if (cp && cp.need === 'city'
+              && /^[a-zA-Z]/.test(text.trim())
+              && text.trim().length >= 2 && text.trim().length <= 50) {
+            const geo = await geocodeCity(text.trim());
+            if (geo.status === 'unique') {
+              const sunInfo = await getSunForPlace(geo.place);
+              if (sunInfo) {
+                await saveResolvedCity(phone, user, geo.place, sunInfo, env, { pending_action: null });
+                await sendMessage(phone, `Got it — saved your city as ${sunInfo.city} 🙏 Ask me about today's tithi anytime.`, env);
+                return new Response('OK', { status: 200 });
+              }
+            }
+            if (geo.status === 'ambiguous') {
+              const lines = geo.candidates.map((c, i) =>
+                `${i + 1} — ${c.name}${c.admin1 ? ', ' + c.admin1 : ''}, ${c.country}`
+              ).join('\n');
+              const rec = serializePending({ need: 'city_pick', intent: cp.intent, choices: geo.candidates });
+              await updateUser(phone, { pending_action: rec }, env);
+              await sendMessage(phone, `Which one?\n\n${lines}\n\nReply with the number.`, env);
+              return new Response('OK', { status: 200 });
+            }
+            await sendMessage(phone, `I couldn't find that city. Try the full name with state or country 🙏`, env);
+            return new Response('OK', { status: 200 });
+          }
+        }
 
+        
 // -- City pick resume: numeric reply to a city_update disambiguation -
         {
           const cityPending = readPending(user.pending_action);
-          if (cityPending && cityPending.need === 'city_pick'
-              && cityPending.intent.journey === 'city_update'
+     if (cityPending && cityPending.need === 'city_pick'
+              && (cityPending.intent.journey === 'city_update' || cityPending.intent.journey === 'tithi')
               && /^[1-9][0-9]?$/.test(text.trim())) {
             const n = parseInt(text.trim(), 10);
             const picked = cityPending.choices[n - 1];
