@@ -397,12 +397,10 @@ if (rbIntent.journey === 'tithi' && !user.city) {
             return new Response('OK', { status: 200 });
           }
         }
-
-        
-// -- City pick resume: numeric reply to a city_update disambiguation -
+// -- City pick resume: numeric reply to a city disambiguation -------
         {
           const cityPending = readPending(user.pending_action);
-     if (cityPending && cityPending.need === 'city_pick'
+          if (cityPending && cityPending.need === 'city_pick'
               && (cityPending.intent.journey === 'city_update' || cityPending.intent.journey === 'tithi')
               && /^[1-9][0-9]?$/.test(text.trim())) {
             const n = parseInt(text.trim(), 10);
@@ -419,49 +417,13 @@ if (rbIntent.journey === 'tithi' && !user.city) {
             return new Response('OK', { status: 200 });
           }
         }
-        
-// -- Code-driven fasting (flat 1-7; option 8 → prompt) -------------
+
+        // -- Code-driven fasting (flat 1-7; option 8 → prompt) -------------
         {
           const fastPending = readPending(user.pending_action);
           const reply = text.trim();
-
           if (fastPending && fastPending.need === 'fast_pick') {
-            if (/^[1-7]$/.test(reply)) {
-              const rules = rulesForNumber(parseInt(reply, 10));
-              if (rules) {
-                await updateUser(phone, { pending_action: null }, env);
-                await sendMessage(phone, rules, env);
-                return new Response('OK', { status: 200 });
-              }
-            }
-            if (rbIntent.params.fast_term && rbIntent.params.fast_term !== 'pachkhan_general') {
-              const rules = rulesFor(rbIntent.params.fast_term);
-              if (rules) {
-                await updateUser(phone, { pending_action: null }, env);
-                await sendMessage(phone, rules, env);
-                return new Response('OK', { status: 200 });
-              }
-            }
-            if (reply === '8') {
-              await updateUser(phone, { pending_action: null }, env);
-            }
-          }
-
-          if (rbIntent.params.fast_term) {
-            const ft = rbIntent.params.fast_term;
-            if (ft === 'pachkhan_general') {
-              const rec = serializePending({ need: 'fast_pick', intent: rbIntent });
-              await updateUser(phone, { pending_action: rec }, env);
-              await sendMessage(phone, FAST_MENU, env);
-              return new Response('OK', { status: 200 });
-            }
-            const rules = rulesFor(ft);
-            if (rules) {
-              await sendMessage(phone, rules, env);
-              return new Response('OK', { status: 200 });
-            }
-          }
-        }
+            ...
         
         // Sunset didn't claim it → this is a fresh message. Abandon any stale
         // city pending so a later "1" or city name can't resume a dead flow.
