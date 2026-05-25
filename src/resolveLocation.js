@@ -40,6 +40,7 @@ export async function resolveLocation(cityRaw) {
   try {
     const cleanCity = raw
       .replace(/,\s*[A-Z]{2}$/i, '')   // strip ", NY" style 2-letter state codes
+      .replace(/\s+[A-Z]{2}$/i, '')    // strip " NY" style (no comma) — e.g. "columbus oh"
       .replace(/,/g, ' ')
       .trim();
 

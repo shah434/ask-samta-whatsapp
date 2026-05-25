@@ -107,7 +107,11 @@ export async function handleCityJourney(phone, text, user, intent, env, journey)
       const n = /^[1-9][0-9]?$/.test(reply) ? parseInt(reply, 10) : null;
       const picked = n && pending.choices[n - 1];
       if (!picked) {
-        await sendMessage(phone, `That number didn't match the list. Please type your city name again 🙏`, env);
+        const max = pending.choices.length;
+        const msg = n
+          ? `That number wasn't in the list. Reply with 1–${max}, or type the full city name 🙏`
+          : `Please reply with a number (1–${max}), or type the full city name with state or country 🙏`;
+        await sendMessage(phone, msg, env);
         return true; // keep pending so they can retry
       }
       await saveCity(phone, user, picked, env);
@@ -159,8 +163,11 @@ export async function handleCityJourney(phone, text, user, intent, env, journey)
   }
 
   // Saved city? Use it without re-geocoding.
+  // city_update sets fallbackToSaved:false — confirming the OLD city when the
+  // user is trying to set a NEW one would be wrong. All other journeys default
+  // to true (use saved city to answer sunset/restaurant without re-asking).
   const saved = placeFromSaved(user);
-  if (saved) {
+  if (saved && journey.fallbackToSaved !== false) {
     await journey.answer(phone, user, saved, intent, env);
     return true;
   }
