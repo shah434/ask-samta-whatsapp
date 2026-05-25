@@ -323,14 +323,19 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
             const lines = geo.candidates.map((c, i) =>
               `${i + 1} — ${c.name}${c.admin1 ? ', ' + c.admin1 : ''}, ${c.country}`
             ).join('\n');
-            const rec = serializePending({ need: 'city_pick', intent: rbIntent, choices: geo.candidates });
+            const rec = serializePending({
+              need: 'city_pick',
+              intent: { journey: 'sunset', params: {}, prompt_blocks: ['calendar'] },
+              choices: geo.candidates
+            });
             await updateUser(phone, { pending_action: rec }, env);
-            await sendMessage(phone, `Which one?\n\n${lines}\n\nReply with the number.`, env);
+            await sendMessage(
+              phone,
+              `I found a few places called "${cityFromMessage}". Which one?\n\n${lines}\n\nReply with the number.`,
+              env
+            );
             return new Response('OK', { status: 200 });
           }
-          await sendMessage(phone, `I couldn't find that city. Try the full name with state or country 🙏`, env);
-          return new Response('OK', { status: 200 });
-        }
 
         // -- Tithi question but no saved city → ask for it via pending_action
 if (rbIntent.journey === 'tithi' && !user.city) {
@@ -401,7 +406,7 @@ if (rbIntent.journey === 'tithi' && !user.city) {
         {
           const cityPending = readPending(user.pending_action);
           if (cityPending && cityPending.need === 'city_pick'
-              && (cityPending.intent.journey === 'city_update' || cityPending.intent.journey === 'tithi')
+              && ['city_update', 'tithi', 'sunset'].includes(cityPending.intent.journey)
               && /^[1-9][0-9]?$/.test(text.trim())) {
             const n = parseInt(text.trim(), 10);
             const picked = cityPending.choices[n - 1];
@@ -409,14 +414,21 @@ if (rbIntent.journey === 'tithi' && !user.city) {
               const sunInfo = await getSunForPlace(picked);
               if (sunInfo) {
                 await saveResolvedCity(phone, user, picked, sunInfo, env, { pending_action: null });
-                await sendMessage(phone, `Got it — saved your city as ${sunInfo.city} 🙏`, env);
+                if (cityPending.intent.journey === 'sunset') {
+                  const sd = formatSunDataForClaude(sunInfo);
+                  const t = sd.match(/Sunset:\s*([\d: APM]+)/i);
+                  await sendMessage(phone, t
+                    ? `Sunset today: ${t[1].trim().toLowerCase()} in ${sunInfo.city} 🌇`
+                    : `Got it — saved your city as ${sunInfo.city} 🙏`, env);
+                } else {
+                  await sendMessage(phone, `Got it — saved your city as ${sunInfo.city} 🙏`, env);
+                }
                 return new Response('OK', { status: 200 });
               }
             }
             await sendMessage(phone, `That number didn't match. Type your city name again 🙏`, env);
             return new Response('OK', { status: 200 });
           }
-        }
 
         // -- Code-driven fasting (flat 1-7; option 8 → prompt) -------------
         {
