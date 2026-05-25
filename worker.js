@@ -323,19 +323,14 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
             const lines = geo.candidates.map((c, i) =>
               `${i + 1} — ${c.name}${c.admin1 ? ', ' + c.admin1 : ''}, ${c.country}`
             ).join('\n');
-            const rec = serializePending({
-              need: 'city_pick',
-              intent: { journey: 'sunset', params: {}, prompt_blocks: ['calendar'] },
-              choices: geo.candidates
-            });
+            const rec = serializePending({ need: 'city_pick', intent: rbIntent, choices: geo.candidates });
             await updateUser(phone, { pending_action: rec }, env);
-            await sendMessage(
-              phone,
-              `I found a few places called "${cityFromMessage}". Which one?\n\n${lines}\n\nReply with the number.`,
-              env
-            );
+            await sendMessage(phone, `Which one?\n\n${lines}\n\nReply with the number.`, env);
             return new Response('OK', { status: 200 });
           }
+          await sendMessage(phone, `I couldn't find that city. Try the full name with state or country 🙏`, env);
+          return new Response('OK', { status: 200 });
+        }
 
         // -- Tithi question but no saved city → ask for it via pending_action
 if (rbIntent.journey === 'tithi' && !user.city) {
@@ -405,7 +400,7 @@ if (rbIntent.journey === 'tithi' && !user.city) {
 // -- City pick resume: numeric reply to a city disambiguation -------
         {
           const cityPending = readPending(user.pending_action);
-          if (cityPending && cityPending.need === 'city_pick'
+         if (cityPending && cityPending.need === 'city_pick'
               && ['city_update', 'tithi', 'sunset'].includes(cityPending.intent.journey)
               && /^[1-9][0-9]?$/.test(text.trim())) {
             const n = parseInt(text.trim(), 10);
@@ -414,7 +409,7 @@ if (rbIntent.journey === 'tithi' && !user.city) {
               const sunInfo = await getSunForPlace(picked);
               if (sunInfo) {
                 await saveResolvedCity(phone, user, picked, sunInfo, env, { pending_action: null });
-               if (cityPending.intent.journey === 'sunset') {
+if (cityPending.intent.journey === 'sunset') {
                   await sendMessage(phone, `Sunset today: ${sunInfo.sunset} in ${sunInfo.city} 🌇`, env);
                 } else {
                   await sendMessage(phone, `Got it — saved your city as ${sunInfo.city} 🙏`, env);
@@ -425,6 +420,7 @@ if (rbIntent.journey === 'tithi' && !user.city) {
             await sendMessage(phone, `That number didn't match. Type your city name again 🙏`, env);
             return new Response('OK', { status: 200 });
           }
+        }
 
         // -- Code-driven fasting (flat 1-7; option 8 → prompt) -------------
         {
@@ -496,11 +492,16 @@ if (rbIntent.journey === 'tithi' && !user.city) {
             return new Response('OK', { status: 200 });
           }
 
-          if (geo.status === 'ambiguous') {
+        if (geo.status === 'ambiguous') {
             const lines = geo.candidates.map((c, i) =>
               `${i + 1} — ${c.name}${c.admin1 ? ', ' + c.admin1 : ''}, ${c.country}`
             ).join('\n');
-          
+            const rec = serializePending({
+              need: 'city_pick',
+              intent: { journey: 'sunset', params: {}, prompt_blocks: ['calendar'] },
+              choices: geo.candidates
+            });
+            await updateUser(phone, { pending_action: rec }, env);
             await sendMessage(
               phone,
               `I found a few places called "${cityFromMessage}". Which one?\n\n${lines}\n\nReply with the number.`,
