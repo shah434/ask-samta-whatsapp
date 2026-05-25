@@ -30,7 +30,7 @@
 // The journeys classify() can emit. Kept in sync with classify.js (frozen).
 const ALLOWED_JOURNEYS = new Set([
   'food', 'tithi', 'sunset', 'restaurant', 'pachkhan',
-  'greeting', 'account', 'offtopic',
+  'greeting', 'account', 'offtopic', 'city_update',
 ]);
 
 // The fields a journey can be waiting on.

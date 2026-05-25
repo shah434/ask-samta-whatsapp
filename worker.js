@@ -309,7 +309,38 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
           if (handled) return new Response('OK', { status: 200 });
         }
 
-        
+// -- City update: bare profile statement ("my city is brooklyn") ---
+        if (rbIntent.journey === 'city_update' && rbIntent.params.city_raw) {
+          const geo = await geocodeCity(rbIntent.params.city_raw);
+          if (geo.status === 'unique') {
+            const sunInfo = await getSunForPlace(geo.place);
+            if (sunInfo) {
+              await saveResolvedCity(phone, user, geo.place, sunInfo, env);
+              await sendMessage(phone, `Got it — saved your city as ${sunInfo.city} 🙏`, env);
+              return new Response('OK', { status: 200 });
+            }
+          }
+          if (geo.status === 'ambiguous') {
+            const lines = geo.candidates.map((c, i) =>
+              `${i + 1} — ${c.name}${c.admin1 ? ', ' + c.admin1 : ''}, ${c.country}`
+            ).join('\n');
+            const rec = serializePending({ need: 'city_pick', intent: rbIntent, choices: geo.candidates });
+            await updateUser(phone, { pending_action: rec }, env);
+            await sendMessage(phone, `Which one?\n\n${lines}\n\nReply with the number.`, env);
+            return new Response('OK', { status: 200 });
+          }
+          await sendMessage(phone, `I couldn't find that city. Try the full name with state or country 🙏`, env);
+          return new Response('OK', { status: 200 });
+        }
+
+        // -- Tithi question but no saved city → ask for it via pending_action
+if (rbIntent.journey === 'tithi' && !user.city) {
+          await sendMessage(phone, `DBG city="${user.city}" phone="${phone}" mc="${user.message_count}"`, env);
+          const rec = serializePending({ need: 'city', intent: rbIntent });
+          await updateUser(phone, { pending_action: rec }, env);
+          await sendMessage(phone, `Which city are you in? Tithis shift slightly by location 🙏`, env);
+          return new Response('OK', { status: 200 });
+        }
         // Fallback router: classify defaulted to food with no real food signal
         // → ambiguous message. Ask Haiku for the journey + city, then re-route
         // city journeys through the same handlers (pending/resume stays intact).
@@ -340,6 +371,57 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
           }
         }
 
+// -- City resume: typed city name answering a need:'city' prompt -----
+        {
+          const cp = readPending(user.pending_action);
+          if (cp && cp.need === 'city'
+              && /^[a-zA-Z]/.test(text.trim())
+              && text.trim().length >= 2 && text.trim().length <= 50) {
+            const geo = await geocodeCity(text.trim());
+            if (geo.status === 'unique') {
+              const sunInfo = await getSunForPlace(geo.place);
+              if (sunInfo) {
+                await saveResolvedCity(phone, user, geo.place, sunInfo, env, { pending_action: null });
+                await sendMessage(phone, `Got it — saved your city as ${sunInfo.city} 🙏 Ask me about today's tithi anytime.`, env);
+                return new Response('OK', { status: 200 });
+              }
+            }
+            if (geo.status === 'ambiguous') {
+              const lines = geo.candidates.map((c, i) =>
+                `${i + 1} — ${c.name}${c.admin1 ? ', ' + c.admin1 : ''}, ${c.country}`
+              ).join('\n');
+              const rec = serializePending({ need: 'city_pick', intent: cp.intent, choices: geo.candidates });
+              await updateUser(phone, { pending_action: rec }, env);
+              await sendMessage(phone, `Which one?\n\n${lines}\n\nReply with the number.`, env);
+              return new Response('OK', { status: 200 });
+            }
+            await sendMessage(phone, `I couldn't find that city. Try the full name with state or country 🙏`, env);
+            return new Response('OK', { status: 200 });
+          }
+        }
+
+        
+// -- City pick resume: numeric reply to a city_update disambiguation -
+        {
+          const cityPending = readPending(user.pending_action);
+     if (cityPending && cityPending.need === 'city_pick'
+              && (cityPending.intent.journey === 'city_update' || cityPending.intent.journey === 'tithi')
+              && /^[1-9][0-9]?$/.test(text.trim())) {
+            const n = parseInt(text.trim(), 10);
+            const picked = cityPending.choices[n - 1];
+            if (picked) {
+              const sunInfo = await getSunForPlace(picked);
+              if (sunInfo) {
+                await saveResolvedCity(phone, user, picked, sunInfo, env, { pending_action: null });
+                await sendMessage(phone, `Got it — saved your city as ${sunInfo.city} 🙏`, env);
+                return new Response('OK', { status: 200 });
+              }
+            }
+            await sendMessage(phone, `That number didn't match. Type your city name again 🙏`, env);
+            return new Response('OK', { status: 200 });
+          }
+        }
+        
 // -- Code-driven fasting (flat 1-7; option 8 → prompt) -------------
         {
           const fastPending = readPending(user.pending_action);
@@ -401,92 +483,7 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
         user = await getUser(phone, env);
       }
 
-      // -- Pending city reply check ------------------------------------------
-      if (user.pending_tithi_city_ask && messageType === 'text') {
-        const replyCity = text.trim();
-
-        // Path 1: numeric pick from a previous disambiguation list
-        const numericPick = /^[1-4]$/.test(replyCity) ? parseInt(replyCity) : null;
-        if (numericPick && user.pending_city_choices) {
-          let choices = null;
-          try { choices = JSON.parse(user.pending_city_choices); } catch {}
-          const picked = choices && choices[numericPick - 1];
-          if (picked) {
-            const sunInfo = await getSunForPlace(picked);
-            if (sunInfo) {
-              await saveResolvedCity(phone, user, picked, sunInfo, env, {
-                pending_tithi_city_ask: false,
-                pending_city_choices: null
-              });
-              user._justResolvedCity = true;
-              text = user.history_1_q || '';
-              // fall through with replayed text
-            } else {
-              await sendMessage(phone, `Sorry — I couldn't look up that city right now. Please try again in a moment.`, env);
-              return new Response('OK', { status: 200 });
-            }
-          } else {
-            await updateUser(phone, { pending_city_choices: null, pending_tithi_city_ask: false }, env);
-            await sendMessage(phone, `That number didn't match the list I sent. Please type your city name again 🙏`, env);
-            return new Response('OK', { status: 200 });
-          }
-        }
-        // Path 2: user typed a city name
-        else if (replyCity.length >= 2 && replyCity.length <= 50) {
-          const geo = await geocodeCity(replyCity);
-
-          if (geo.status === 'not_found') {
-            await sendMessage(phone, `I couldn't find that city. Please type the full city name with state or country, or your zip code.`, env);
-            return new Response('OK', { status: 200 });
-          }
-
-          if (geo.status === 'ambiguous') {
-            const lines = geo.candidates.map((c, i) =>
-              `${i + 1} — ${c.name}${c.admin1 ? ', ' + c.admin1 : ''}, ${c.country}`
-            ).join('\n');
-            await updateUser(phone, { pending_city_choices: JSON.stringify(geo.candidates) }, env);
-            await sendMessage(phone, `I found a few places called "${replyCity}". Which one?\n\n${lines}\n\nReply with the number.`, env);
-            return new Response('OK', { status: 200 });
-          }
-
-          // status === 'unique'
-          const sunInfo = await getSunForPlace(geo.place);
-          if (!sunInfo) {
-            await sendMessage(phone, `Sorry — I couldn't look up that city right now. Please try again in a moment.`, env);
-            return new Response('OK', { status: 200 });
-          }
-          await saveResolvedCity(phone, user, geo.place, sunInfo, env, {
-            pending_tithi_city_ask: false,
-            pending_city_choices: null
-          });
-          user._justResolvedCity = true;
-          text = user.history_1_q || '';
-          // fall through with replayed text
-        }
-        // Path 3: junk input — clear and continue
-        else {
-          await setFlagKV(phone, { pending_tithi_city_ask: false }, env);
-          user.pending_tithi_city_ask = false;
-        }
-
-        if (user._justResolvedCity && (!text || !text.trim())) {
-          await sendMessage(phone, `Got it — saved your city as ${user.city}. What would you like to check? 🙏`, env);
-          return new Response('OK', { status: 200 });
-        }
-      }
-
-      // -- Tithi-city ask ----------------------------------------------------
-      if (isTithiQuery(text) && !user.city && messageType === 'text' && !user.pending_tithi_city_ask) {
-        await setFlagKV(phone, { pending_tithi_city_ask: true }, env);
-        await sendMessage(
-          phone,
-          `Which city are you in? Tithis depend on the lunar cycle and shift slightly by location, so I want to give you the right answer 🙏`,
-          env
-        );
-        return new Response('OK', { status: 200 });
-      }
-
-     let googleResults = [];
+      let googleResults = [];
 
       // -- Sunset / sunrise --------------------------------------------------
       let sunData = '';
@@ -590,6 +587,15 @@ console.log(`[unmatched-short] u=${u} len=${text.length}`);    }
       let tithiFact = '';
       const m = calendarData.match(/TODAY_IS_TITHI:\s*true[\s\S]*?TODAY_TITHI_NAME:\s*(.+)/i);
       if (m) tithiFact = `Today is ${m[1].trim()} 🙏\n\n`;
+// Tithi question + today is not a tithi → answer directly, skip Claude.
+      const isTithiQ = queryTypes.includes('calendar') && /\btithi\b|fast day|special day/i.test(text);
+      const todayIsTithi = /TODAY_IS_TITHI:\s*true/i.test(calendarData);
+      if (isTithiQ && !todayIsTithi && user.community === 'jain') {
+        await sendMessage(phone, `Today's not a special day 🙏 Let me know if you're thinking of starting a fast.`, env);
+        return new Response('OK', { status: 200 });
+      }
+
+      
       // -- Build Claude messages ---------------------------------------------
       let claudeMessages = [];
       let searchSnippets = null;   // Branch B search context for system prompt
@@ -741,22 +747,7 @@ console.log(`[unmatched-short] u=${u} len=${text.length}`);    }
           if (sunInfo) {
             await saveResolvedCity(phone, user, geo.place, sunInfo, env);
           }
-        } else if (geo.status === 'ambiguous') {
-          const lines = geo.candidates.map((c, i) =>
-            `${i + 1} — ${c.name}${c.admin1 ? ', ' + c.admin1 : ''}, ${c.country}`
-          ).join('\n');
-          await updateUser(phone, {
-            pending_city_choices: JSON.stringify(geo.candidates),
-            pending_tithi_city_ask: true,
-            history_1_q: text
-          }, env);
-          await sendMessage(
-            phone,
-            `Before I save that — I found a few places called "${updates.city}". Which one?\n\n${lines}\n\nReply with the number.`,
-            env
-          );
-          return new Response('OK', { status: 200 });
-        }
+        } 
         // status === 'not_found' — silently skip the save
       }
 
