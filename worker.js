@@ -446,6 +446,8 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
         user = await getUser(phone, env);
       }
 
+      let googleResults = [];
+
       // -- Sunset / sunrise --------------------------------------------------
       let sunData = '';
       if (detectSunsetQuery(text)) {
@@ -582,7 +584,7 @@ console.log(`[unmatched-short] u=${u} len=${text.length}`);    }
       }
 
       // -- System prompt + Claude call ---------------------------------------
-      const system = buildSystemPrompt(user, googleResults, calendarData, sunData, queryTypes);
+const system = buildSystemPrompt(user, googleResults, calendarData, sunData, queryTypes);
       console.log(`[perf] claude_start=${Date.now() - t0}ms`);
       const response = await callClaude(claudeMessages, system, env);
       console.log(`[perf] claude_done=${Date.now() - t0}ms`);
