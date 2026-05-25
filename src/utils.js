@@ -59,23 +59,8 @@ export function classifyQuery(text, hasImage) {
   return Array.from(types);
 }
 
-export function parseProfileUpdate(text) {
-  const strictnessMatch = text.match(/\[STRICTNESS_UPDATE:\s*(strict|moderate|flexible)\]/i);
-  const communityMatch = text.match(/\[COMMUNITY_UPDATE:\s*(jain|baps)\]/i);
-  const cityMatch = text.match(/\[CITY_UPDATE:\s*([^\]]+)\]/i);
-  return {
-    strictness: strictnessMatch ? strictnessMatch[1] : null,
-    community: communityMatch ? communityMatch[1] : null,
-    city: cityMatch ? cityMatch[1].trim() : null
-  };
-}
-
 export function stripTags(text) {
-  return text
-    .replace(/\[STRICTNESS_UPDATE:.*?\]/gi, '')
-    .replace(/\[COMMUNITY_UPDATE:.*?\]/gi, '')
-    .replace(/\[CITY_UPDATE:.*?\]/gi, '')
-    .trim();
+  return text.trim();
 }
 
 export function buildSystemPrompt(user, googleResults, calendarData, sunData, queryTypes, searchSnippets = null) {

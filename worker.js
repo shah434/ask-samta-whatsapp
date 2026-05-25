@@ -10,17 +10,17 @@ import { serializePending } from './src/pending.js';
 import { handleRebuildSunset, rebuildSunsetClaims } from './src/rebuild-sunset.js';
 import { handleRebuildRestaurant, rebuildRestaurantClaims } from './src/rebuild-restaurant.js';
 import { handleCityUpdate, cityUpdateClaims } from './src/rebuild-city-update.js';
-import { getUser, createUser, updateUser, deleteUser, setFlagKV } from './src/database.js';
+import { handleProfileUpdate, profileUpdateClaims } from './src/rebuild-profile-update.js';
+import { getUser, createUser, updateUser, deleteUser } from './src/database.js';
 import { routeFallback } from './src/route-fallback.js';
 import { sendMessage, sendReaction, sendImage, getImageAsBase64 } from './src/whatsapp.js';
 import { callClaude } from './src/claude.js';
 import { identifyProduct, searchProductIngredients } from './src/search.js';
-import { parseProfileUpdate, stripTags, buildSystemPrompt, classifyQuery } from './src/utils.js';
+import { stripTags, buildSystemPrompt, classifyQuery } from './src/utils.js';
 import {
   DEFAULT_DIET,
   getWelcomeMessage,
   getStrictnessQuestion,
-  applyStrictnessReply,
 } from './src/onboarding.js';
 import { getCalendarCached, getTodayAndUpcomingEvents, formatEventsForClaude } from './src/calendar.js';
 // ────────────────────────────────────────────────────────────────────────────
@@ -265,8 +265,10 @@ export default {
       // pending-delete) so those commands always win over a pending sunset
       // resume. classify() decides; only sunset is wired to the new path —
       // everything else falls through to the old code below.
+      // rbIntent is hoisted so the strictness-ask block below can reference it.
+      let rbIntent = { journey: 'food', params: {}, prompt_blocks: [] };
       if (messageType === 'text') {
-        const rbIntent = classify(text, false);
+        rbIntent = classify(text, false);
         if (rebuildSunsetClaims(user, rbIntent, text)) {
           const handled = await handleRebuildSunset(phone, text, user, rbIntent, env);
           if (handled) return new Response('OK', { status: 200 });
@@ -279,6 +281,12 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
         // -- City update: "my city is X", "I live in X" etc. ----------------
         if (cityUpdateClaims(user, rbIntent, text)) {
           const handled = await handleCityUpdate(phone, text, user, rbIntent, env);
+          if (handled) return new Response('OK', { status: 200 });
+        }
+
+        // -- Profile update: "make me strict", 1/2/3 reply to strictness ask --
+        if (profileUpdateClaims(user, rbIntent, text)) {
+          const handled = await handleProfileUpdate(phone, text, user, rbIntent, env);
           if (handled) return new Response('OK', { status: 200 });
         }
 
@@ -354,12 +362,16 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
             }
           }
         }
-        }    
-      // -- Pending strictness reply check ------------------------------------
-      if (user.pending_strictness_ask && messageType === 'text') {
-        const handled = await applyStrictnessReply(phone, text, env);
-        if (handled) return new Response('OK', { status: 200 });
-        user = await getUser(phone, env);
+        }
+
+        // -- Clear stale pending -----------------------------------------------
+        // If we reach here, no journey claimed this turn. Any pending_action is
+        // now stale (user moved on) — clear it so it doesn't haunt future turns.
+        const stalePending = readPending(user.pending_action);
+        if (stalePending) {
+          await updateUser(phone, { pending_action: null }, env);
+          user.pending_action = null;
+        }
       }
 
       let googleResults = [];
@@ -491,7 +503,6 @@ console.log(`[unmatched-short] u=${u} len=${text.length}`);    }
       const response = await callClaude(claudeMessages, system, env, maxTokens);
       console.log(`[perf] claude_done=${Date.now() - t0}ms`);
 
-      const updates = parseProfileUpdate(response);
       let cleanResponse = stripTags(response);
       cleanResponse = cleanResponse
         .replace(/TODAY_IS_TITHI:\s*(true|false)/gi, '')
@@ -536,14 +547,6 @@ console.log(`[unmatched-short] u=${u} len=${text.length}`);    }
         }
       }
 
-      // -- Profile updates from Claude ---------------------------------------
-      if (updates.strictness || updates.community) {
-        await updateUser(phone, {
-          ...(updates.strictness && { strictness: updates.strictness }),
-          ...(updates.community && { community: updates.community })
-        }, env);
-      }
-
       // -- Strictness ask append ---------------------------------------------
       cleanResponse = cleanResponse.replace(/\[ASK_STRICTNESS\]/gi, '').trim();
 
@@ -552,8 +555,9 @@ console.log(`[unmatched-short] u=${u} len=${text.length}`);    }
       const levelsShown = [/\bif strict\b/i, /\bif moderate\b/i, /\bif flexible\b/i]
         .filter(re => re.test(cleanResponse)).length;
       const hasDualVerdict = levelsShown > 1;
+      const alreadyAskedStrictness = readPending(user.pending_action)?.need === 'strictness';
       const needsStrictnessAsk = !user.strictness
-        && !updates.strictness
+        && !alreadyAskedStrictness
         && isStrictnessSensitive
         && !isFasting
         && !isLikelyGreeting(text)
@@ -562,7 +566,8 @@ console.log(`[unmatched-short] u=${u} len=${text.length}`);    }
       if (needsStrictnessAsk) {
         cleanResponse += '\n\n' + getStrictnessQuestion();
         cleanResponse += '\n\n💡 Type *help* anytime to see what else I can do.';
-        await setFlagKV(phone, { pending_strictness_ask: true }, env);
+        const rec = serializePending({ need: 'strictness', intent: rbIntent });
+        if (rec) await updateUser(phone, { pending_action: rec }, env);
       }
 
       // -- Send response -----------------------------------------------------
@@ -591,7 +596,6 @@ console.log(`[unmatched-short] u=${u} len=${text.length}`);    }
           history_3_q: user.history_2_q || '',
           history_3_a: user.history_2_a || '',
           message_count: (user.message_count || 0) + 1,
-          ...(needsStrictnessAsk && { pending_strictness_ask: true }),
         }, env);
       })());
 

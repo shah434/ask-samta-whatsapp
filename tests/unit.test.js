@@ -1,13 +1,14 @@
 // ============================================
 // unit.test.js — Pure function tests for Samta
-// Covers: classifyQuery, parseProfileUpdate,
-//         stripTags (utils.js), detectFastTerm
-//         (fasting-match.js)
+// Covers: classifyQuery, stripTags (utils.js),
+//         profile_update journey (classify.js),
+//         detectFastTerm (fasting-match.js)
 // Run: npm test
 // ============================================
 
 import { describe, it, expect } from 'vitest';
-import { classifyQuery, parseProfileUpdate, stripTags } from '../src/utils.js';
+import { classifyQuery, stripTags } from '../src/utils.js';
+import { classify } from '../src/classify.js';
 import { detectFastTerm } from '../src/fasting-match.js';
 
 // ============================================
@@ -138,77 +139,78 @@ describe('classifyQuery', () => {
 });
 
 // ============================================
-// parseProfileUpdate
+// profile_update journey (classify)
 // ============================================
 
-describe('parseProfileUpdate', () => {
+describe('profile_update journey', () => {
 
-  it('parses STRICTNESS_UPDATE: strict', () => {
-    const r = parseProfileUpdate('Got it 🙏 [STRICTNESS_UPDATE: strict]');
-    expect(r.strictness).toBe('strict');
-    expect(r.community).toBeNull();
-    expect(r.city).toBeNull();
+  // --- Strictness ---
+  it('"make me strict" → profile_update, strictness_level: strict', () => {
+    const r = classify('make me strict');
+    expect(r.journey).toBe('profile_update');
+    expect(r.params.strictness_level).toBe('strict');
+    expect(r.prompt_blocks).toEqual([]);
   });
 
-  it('parses STRICTNESS_UPDATE: moderate', () => {
-    expect(parseProfileUpdate('[STRICTNESS_UPDATE: moderate]').strictness).toBe('moderate');
+  it('"set me to moderate" → profile_update, strictness_level: moderate', () => {
+    const r = classify('set me to moderate');
+    expect(r.journey).toBe('profile_update');
+    expect(r.params.strictness_level).toBe('moderate');
   });
 
-  it('parses STRICTNESS_UPDATE: flexible', () => {
-    expect(parseProfileUpdate('[STRICTNESS_UPDATE: flexible]').strictness).toBe('flexible');
+  it('"I\'m flexible" → profile_update, strictness_level: flexible', () => {
+    const r = classify("I'm flexible");
+    expect(r.journey).toBe('profile_update');
+    expect(r.params.strictness_level).toBe('flexible');
   });
 
-  it('parses COMMUNITY_UPDATE: baps', () => {
-    const r = parseProfileUpdate('Updated 🙏 [COMMUNITY_UPDATE: baps]');
-    expect(r.community).toBe('baps');
-    expect(r.strictness).toBeNull();
+  it('"switch me to flexible" → profile_update', () => {
+    const r = classify('switch me to flexible');
+    expect(r.journey).toBe('profile_update');
+    expect(r.params.strictness_level).toBe('flexible');
   });
 
-  it('parses COMMUNITY_UPDATE: jain', () => {
-    expect(parseProfileUpdate('[COMMUNITY_UPDATE: jain]').community).toBe('jain');
+  it('"update my strictness to strict" → profile_update', () => {
+    const r = classify('update my strictness to strict');
+    expect(r.journey).toBe('profile_update');
+    expect(r.params.strictness_level).toBe('strict');
   });
 
-  it('parses CITY_UPDATE with plain city', () => {
-    expect(parseProfileUpdate('[CITY_UPDATE: Chicago]').city).toBe('Chicago');
+  // --- Community ---
+  it('"I\'m BAPS" → profile_update, community: baps', () => {
+    const r = classify("I'm BAPS");
+    expect(r.journey).toBe('profile_update');
+    expect(r.params.community).toBe('baps');
+    expect(r.prompt_blocks).toEqual([]);
   });
 
-  it('parses CITY_UPDATE with multi-word city', () => {
-    expect(parseProfileUpdate('[CITY_UPDATE: New York]').city).toBe('New York');
+  it('"I\'m Jain" → profile_update, community: jain', () => {
+    const r = classify("I'm Jain");
+    expect(r.journey).toBe('profile_update');
+    expect(r.params.community).toBe('jain');
   });
 
-  it('trims whitespace from CITY_UPDATE', () => {
-    expect(parseProfileUpdate('[CITY_UPDATE:  San Francisco  ]').city).toBe('San Francisco');
+  it('"switch me to BAPS" → profile_update, community: baps', () => {
+    const r = classify('switch me to BAPS');
+    expect(r.journey).toBe('profile_update');
+    expect(r.params.community).toBe('baps');
   });
 
-  it('parses all three tags in one response', () => {
-    const text = 'All updated! [STRICTNESS_UPDATE: moderate] [COMMUNITY_UPDATE: baps] [CITY_UPDATE: Dallas]';
-    const r = parseProfileUpdate(text);
-    expect(r.strictness).toBe('moderate');
-    expect(r.community).toBe('baps');
-    expect(r.city).toBe('Dallas');
+  it('"I am Jain" → profile_update, community: jain', () => {
+    const r = classify('I am Jain');
+    expect(r.journey).toBe('profile_update');
+    expect(r.params.community).toBe('jain');
   });
 
-  it('returns all nulls when no tags present', () => {
-    const r = parseProfileUpdate('✅ SAFE — tofu is fine at all levels 🙏');
-    expect(r.strictness).toBeNull();
-    expect(r.community).toBeNull();
-    expect(r.city).toBeNull();
+  // --- Non-profile messages do NOT fire ---
+  it('"I\'m Jain, can I eat paneer?" stays food (not profile_update)', () => {
+    const r = classify("I'm Jain, can I eat paneer?");
+    expect(r.journey).not.toBe('profile_update');
   });
 
-  it('case-insensitive tag matching', () => {
-    expect(parseProfileUpdate('[strictness_update: strict]').strictness).toBe('strict');
-    expect(parseProfileUpdate('[COMMUNITY_UPDATE: BAPS]').community).toBe('BAPS');
-  });
-
-  it('invalid strictness value → null (not in allowed list)', () => {
-    expect(parseProfileUpdate('[STRICTNESS_UPDATE: very_strict]').strictness).toBeNull();
-  });
-
-  it('handles empty string input', () => {
-    const r = parseProfileUpdate('');
-    expect(r.strictness).toBeNull();
-    expect(r.community).toBeNull();
-    expect(r.city).toBeNull();
+  it('"can I eat this during my fast?" stays food', () => {
+    const r = classify("can I eat this during my fast?");
+    expect(r.journey).not.toBe('profile_update');
   });
 });
 
@@ -218,44 +220,17 @@ describe('parseProfileUpdate', () => {
 
 describe('stripTags', () => {
 
-  it('strips STRICTNESS_UPDATE tag', () => {
-    const result = stripTags('Got it 🙏 [STRICTNESS_UPDATE: strict]');
-    expect(result).toBe('Got it 🙏');
-    expect(result).not.toContain('[STRICTNESS_UPDATE');
-  });
-
-  it('strips COMMUNITY_UPDATE tag', () => {
-    const result = stripTags('Updated [COMMUNITY_UPDATE: baps]');
-    expect(result).toBe('Updated');
-  });
-
-  it('strips CITY_UPDATE tag', () => {
-    const result = stripTags('Got it — updated your city to Chicago. [CITY_UPDATE: Chicago]');
-    expect(result).not.toContain('[CITY_UPDATE');
-  });
-
-  it('strips all three tags from one response', () => {
-    const text = 'All done! [STRICTNESS_UPDATE: moderate] [COMMUNITY_UPDATE: baps] [CITY_UPDATE: Dallas]';
-    const result = stripTags(text);
-    expect(result).not.toContain('[STRICTNESS_UPDATE');
-    expect(result).not.toContain('[COMMUNITY_UPDATE');
-    expect(result).not.toContain('[CITY_UPDATE');
-    expect(result).toBe('All done!');
-  });
-
   it('returns text unchanged when no tags present', () => {
     const text = '✅ SAFE — tofu is fine at all levels 🙏';
     expect(stripTags(text)).toBe(text);
   });
 
-  it('trims leading/trailing whitespace after stripping', () => {
-    const result = stripTags('[CITY_UPDATE: Austin] Some response ');
-    expect(result).toBe('Some response');
+  it('trims leading/trailing whitespace', () => {
+    expect(stripTags('  Some response  ')).toBe('Some response');
   });
 
-  it('strips tag in middle of text cleanly', () => {
-    const result = stripTags('Updated [COMMUNITY_UPDATE: jain] your profile.');
-    expect(result).not.toContain('[COMMUNITY_UPDATE');
+  it('handles empty string', () => {
+    expect(stripTags('')).toBe('');
   });
 });
 

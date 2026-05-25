@@ -18,7 +18,7 @@
 // touches the old flags, never replays raw text.
 // ============================================
 
-import { resolveLocation, formatCandidatePicker } from './resolveLocation.js';
+import { resolveLocation, formatCandidatePicker, expandStateCode } from './resolveLocation.js';
 import { serializePending, readPending } from './pending.js';
 import { sendMessage } from './whatsapp.js';
 import { updateUser } from './database.js';
@@ -68,6 +68,31 @@ export function isBareReply(text) {
   return t.length >= 2 && t.length <= 50;
 }
 
+// Match a typed reply against the existing picker choices by admin1 or state code.
+// Returns the matching place if exactly one choice matches, null otherwise.
+function matchChoiceByRegion(reply, choices) {
+  const lower = reply.toLowerCase().trim();
+
+  // Direct admin1 match: "new york", "ohio", "indiana"
+  const byAdmin1 = choices.filter(c =>
+    c.admin1 && c.admin1.toLowerCase() === lower
+  );
+  if (byAdmin1.length === 1) return byAdmin1[0];
+
+  // 2-letter state code: "ny" → "New York", "oh" → "Ohio"
+  if (lower.length === 2) {
+    const stateName = expandStateCode(lower);
+    if (stateName) {
+      const byState = choices.filter(c =>
+        c.admin1 && c.admin1.toLowerCase() === stateName.toLowerCase()
+      );
+      if (byState.length === 1) return byState[0];
+    }
+  }
+
+  return null;
+}
+
 // Persist a resolved place onto the user (DB + in-memory), clearing pending.
 async function saveCity(phone, user, place, env) {
   const display = `${place.name}${place.admin1 ? ', ' + place.admin1 : ''}${place.country ? ', ' + place.country : ''}`;
@@ -115,9 +140,18 @@ export async function handleCityJourney(phone, text, user, intent, env, journey)
         await journey.answer(phone, user, picked, pending.intent, env);
         return true;
       }
-      // Non-numeric or out-of-range — try resolving as a fresh city name.
-      // e.g. user typed "columbus, oh" or "new york" instead of picking a number.
+      // Non-numeric or out-of-range — try matching against existing choices first,
+      // then resolve as a fresh city name.
+      // e.g. user typed "new york" or "oh" to narrow the picker, or "columbus, oh".
       if (!n && reply.length >= 2) {
+        // Try matching the reply against existing choices by admin1 or state code.
+        // "new york" picks Brooklyn, New York from [Brooklyn, New York / Brooklyn, Indiana].
+        const regionMatch = matchChoiceByRegion(reply, pending.choices);
+        if (regionMatch) {
+          await saveCity(phone, user, regionMatch, env);
+          await journey.answer(phone, user, regionMatch, pending.intent, env);
+          return true;
+        }
         const res = await resolveLocation(reply);
         if (res.status === 'resolved') {
           await saveCity(phone, user, res.place, env);
