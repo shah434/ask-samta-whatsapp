@@ -446,19 +446,6 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
         user = await getUser(phone, env);
       }
 
-      // -- Tithi-city ask ----------------------------------------------------
-      if (isTithiQuery(text) && !user.city && messageType === 'text' && !user.pending_tithi_city_ask) {
-        await setFlagKV(phone, { pending_tithi_city_ask: true }, env);
-        await sendMessage(
-          phone,
-          `Which city are you in? Tithis depend on the lunar cycle and shift slightly by location, so I want to give you the right answer 🙏`,
-          env
-        );
-        return new Response('OK', { status: 200 });
-      }
-
-     let googleResults = [];
-
       // -- Sunset / sunrise --------------------------------------------------
       let sunData = '';
       if (detectSunsetQuery(text)) {
