@@ -236,7 +236,6 @@ export default {
       ]);
 
       console.log(`[perf] phase1_parallel=${Date.now() - t0}ms type=${messageType}`);
-await sendMessage(phone, `DBG city="${user?.city}" phone="${phone}" pa="${user?.pending_action}"`, env);
 
       // -- New user creation + welcome ---------------------------------------
       if (!user) {
@@ -335,7 +334,6 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
 
         // -- Tithi question but no saved city → ask for it via pending_action
 if (rbIntent.journey === 'tithi' && !user.city) {
-          await sendMessage(phone, `DBG city="${user.city}" phone="${phone}" mc="${user.message_count}"`, env);
           const rec = serializePending({ need: 'city', intent: rbIntent });
           await updateUser(phone, { pending_action: rec }, env);
           await sendMessage(phone, `Which city are you in? Tithis shift slightly by location 🙏`, env);
