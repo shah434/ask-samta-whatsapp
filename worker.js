@@ -11,7 +11,7 @@ import { handleRebuildRestaurant, rebuildRestaurantClaims } from './src/rebuild-
 import { handleCityUpdate, cityUpdateClaims } from './src/rebuild-city-update.js';
 import { handleProfileUpdate, profileUpdateClaims } from './src/rebuild-profile-update.js';
 import { handleRebuildTithi, tithiClaims } from './src/rebuild-tithi.js';
-import { getUser, createUser, updateUser, deleteUser } from './src/database.js';
+import { getUser, createUser, updateUser, deleteUser, fetchPendingAction } from './src/database.js';
 import { routeFallback } from './src/route-fallback.js';
 import { sendMessage, sendReaction, sendImage, getImageAsBase64 } from './src/whatsapp.js';
 import { handleRebuildFood } from './src/rebuild-food.js';
@@ -171,11 +171,17 @@ export default {
         : null;
 
       let user, calendarEvents;
-      [, user, calendarEvents] = await Promise.all([
+      let freshPending;
+      [, user, calendarEvents, freshPending] = await Promise.all([
         sendReaction(phone, messageId, env),
         getUser(phone, env),
         getCalendarCached(env),
+        fetchPendingAction(phone, env),  // always-fresh Supabase read, runs in parallel
       ]);
+
+      // Override the KV-cached pending_action with the always-fresh Supabase value.
+      // undefined means the fetch errored — fall back to KV value rather than null.
+      if (user && freshPending !== undefined) user.pending_action = freshPending;
 
       console.log(`[perf] phase1_parallel=${Date.now() - t0}ms type=${messageType}`);
 

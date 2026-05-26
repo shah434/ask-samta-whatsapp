@@ -55,6 +55,28 @@ async function mergeUserKVOnly(phone, fields, env) {
 
 // ── Public functions ────────────────────────────────────────────────────────
 
+// Fetch pending_action directly from Supabase — always fresh, never stale.
+// Run this in parallel with getUser so it adds no wall-clock latency.
+// The result overwrites user.pending_action from the KV cache.
+export async function fetchPendingAction(phone, env) {
+  try {
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/users?phone_number=eq.${phone}&select=pending_action&limit=1`,
+      {
+        headers: {
+          apikey: env.SUPABASE_KEY,
+          Authorization: `Bearer ${env.SUPABASE_KEY}`
+        }
+      }
+    );
+    const data = await res.json();
+    return data[0]?.pending_action ?? null;
+  } catch (err) {
+    console.log(`[cache] fetchPendingAction_error phone=${phone} err=${err.message}`);
+    return undefined; // undefined = caller should fall back to KV value
+  }
+}
+
 export async function getUser(phone, env) {
   // KV first (~5ms on hit)
   const cached = await getUserFromKV(phone, env);
