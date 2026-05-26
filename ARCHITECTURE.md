@@ -53,11 +53,15 @@ Handled before `classify()`. No Claude involved.
 | 2 | `restaurant` | Find places to eat |
 | 3 | `city_update` | "my city is X", "I live in X" |
 | 4 | `profile_update` | "make me strict", "I'm BAPS", pending strictness reply |
-| 5 | `tithi` | Calendar / fast day questions |
-| 6 | `routeFallback` | Ambiguous messages (≥3 chars) — Haiku re-routes to sunset or restaurant |
-| 7 | fasting (code-driven) | Pachkhan menu, 1–7 picks, named fasts |
-| 8 | stale pending clear | Nothing claimed it → user moved on → clear pending_action |
-| 9 | **food** (catch-all) | Everything else, including images |
+| 5 | `tithi_food_followup` | Short reply after tithi response ending with `?` |
+| 6 | `food_followup` | Short reply after food response ending with `?` |
+| 7 | `tithi_followup` | "yes" after sunset offers fast-day check (Jain only) |
+| 8 | `tithi` | Calendar / fast day questions |
+| 9 | `routeFallback` | Ambiguous messages (≥3 chars) — Haiku re-routes to sunset or restaurant |
+| 10 | `upvas_pick` | Chovihar/Tivihar reply after bare "upvas" |
+| 11 | fasting (code-driven) | Pachkhan menu, 1–8 picks, named fasts |
+| 12 | stale pending clear | Nothing claimed it → user moved on → clear pending_action |
+| 13 | **food** (catch-all) | Everything else, including images |
 
 Each handler returns `true` if it handled the turn. `worker.js` returns 200 immediately after.
 
@@ -106,7 +110,13 @@ Direct Supabase write — no Claude involved. Handles:
 
 ### Fasting (code-driven in worker.js)
 
-Flat lookup against `fasting-rules.js`. No Claude for any named fast (Upvas, Ayambil, Ekasan, etc.). Claude is only invoked if the user picks option 8 (complex fasts).
+Flat lookup against `fasting-rules.js`. No Claude for any named fast. 8 menu options:
+1 Upvas Chovihar, 2 Upvas Tivihar, 3 Ekasan, 4 Ayambil, 5 Biyasan, 6 Chauvihar, 7 Tivihar, 8 Navkarsi.
+
+Each reply = rules text + YouTube link + elders disclaimer. Claude only invoked for option 9+ (complex fasts).
+
+Bare "upvas" → `upvas_pick` pending → UPVAS_MENU → Chovihar or Tivihar reply.
+Compound terms ("upvas chovihar") detected by pre-pass in `fasting-match.js` before the token loop.
 
 ---
 
@@ -115,7 +125,8 @@ Flat lookup against `fasting-rules.js`. No Claude for any named fast (Upvas, Aya
 One column: `users.pending_action` (Supabase + KV mirror). Shape:
 
 ```js
-{ need: 'city' | 'city_pick' | 'strictness' | 'fast_pick', intent, choices? }
+{ need: 'city' | 'city_pick' | 'strictness' | 'fast_pick' | 'upvas_pick' |
+        'tithi_followup' | 'tithi_food_followup' | 'food_followup', intent, choices? }
 ```
 
 - `readPending()` validates on every read. Returns `null` on any corruption → start fresh.
