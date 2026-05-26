@@ -58,7 +58,7 @@ const BARE_TOPIC = {
 
 // ── Keyword sets ────────────────────────────────────────────────────────────
 const RE_RESTAURANT = /\b(restaurant|restaurants|eat near|food near|where to eat|where can i eat|find jain|find baps|places to eat|somewhere to eat)\b/i;
-const RE_TEMPLE     = /\b(temple|mandir|derasar|upashray|jain center|jain centre|baps center|baps centre|find.*temple|find.*mandir|temple near|mandir near)\b/i;
+const RE_TEMPLE     = /\b(temples?|mandirs?|derasar|upashray|jain cent(?:er|re)|baps cent(?:er|re)|find.*temples?|find.*mandirs?|temples?\s+near|mandirs?\s+near)\b/i;
 const RE_SUBSTITUTE = /\b(substitute|substitution|alternative|alternatives|instead of|replace|replacement|swap)\b/i;
 const RE_MEDICINE   = /\b(medicine|medication|supplement|capsule|tablet|drug|pill|pharma|prescription|vitamin|tablets|capsules)\b/i;
 const RE_SUNSET     = /\b(sunset|sun set|when does the sun set|what time.*sun.*down)\b/i;
