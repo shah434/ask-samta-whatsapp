@@ -6,7 +6,7 @@ import { cityJourneyClaims, handleCityJourney } from './rebuild-city-journey.js'
 import { getCalendarCached, formatEventsForClaude } from './calendar.js';
 import { callClaude } from './claude.js';
 import { sendMessage } from './whatsapp.js';
-import { CORE_IDENTITY, RULES_JAIN, RULES_BAPS, USE_CASE_CALENDAR } from './prompts.js';
+import { buildSystemPrompt } from './utils.js';
 
 const TITHI_CLAIM_PATTERNS = [
   /\btoday\s+is\s+(a\s+)?(?:beej|bij|chaturdashi|chaumasi|paryushan(?:a)?|ekadashi|atthai|attham|chhath|punam|ashtami|nom|amavasya|purnima|fast day|tithi)\b/i,
@@ -23,27 +23,14 @@ async function answerTithi(phone, user, place, intent, env) {
   const calendarEvents = await getCalendarCached(env); // KV hit, ~5ms
   const needsFull = /paryushana|coming|upcoming|next|when/i.test(intent.params?.original_text || '');
   const calendarData = user.community === 'jain'
-    ? formatEventsForClaude(calendarEvents, user.timezone, needsFull ? 10 : 3)
+    ? formatEventsForClaude(calendarEvents, place.timezone, needsFull ? 10 : 3)
     : '';
 
   const todayIsTithi = /TODAY_IS_TITHI:\s*true/i.test(calendarData);
-  const rules = user.community === 'baps' ? RULES_BAPS : RULES_JAIN;
-  const userTz = user.timezone || 'America/New_York';
-  const today = new Date().toLocaleDateString('en-US', {
-    timeZone: userTz, weekday: 'short', year: 'numeric', month: 'short', day: 'numeric'
-  });
 
-  const staticBlock = CORE_IDENTITY + rules + USE_CASE_CALENDAR;
-  const dynamicBlock =
-    `CURRENT USER PROFILE:\nCommunity: ${user.community || 'jain'}\nCity: ${user.city || 'not set'}\nToday's date: ${today}` +
-    (calendarData
-      ? `\n\nJAIN CALENDAR — NEXT 30 DAYS:\n${calendarData}\nTITHI RULE: Never state the tithi name — that line is prepended separately. If today is a tithi, give ONLY a 2-line explanation of its dietary practice.`
-      : '');
-
-  const system = [
-    { type: 'text', text: staticBlock, cache_control: { type: 'ephemeral', ttl: '1h' } },
-    { type: 'text', text: dynamicBlock },
-  ];
+  // Use the shared buildSystemPrompt so tithi queries share the main Jain
+  // cache bucket with food queries instead of having their own smaller bucket.
+  const system = buildSystemPrompt(user, calendarData, '', null);
 
   // Use the original user question stored in intent params
   const question = intent.params?.original_text || 'What tithi is today?';
