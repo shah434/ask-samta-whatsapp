@@ -157,8 +157,12 @@ TODAY_TITHI_NAME: ${todayEvent.summary}`
   // Upcoming line — labeled so Claude can't mistake a future event for today
   const upcomingLines = upcoming.length
     ? upcoming.map(event => {
+        // ICS all-day events are stored as UTC midnight (new Date(y,m,d) in a
+        // UTC-local environment). Formatting in any behind-UTC timezone shifts
+        // the instant to the previous day at 8/9 PM — showing the wrong date.
+        // Always format in UTC so the calendar date is preserved exactly.
         const label = event.date.toLocaleDateString('en-US', {
-          weekday: 'short', month: 'short', day: 'numeric', timeZone: tz
+          weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC'
         });
         return `${label}: ${event.summary}`;
       }).join('\n')

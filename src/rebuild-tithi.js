@@ -7,6 +7,8 @@ import { getCalendarCached, formatEventsForClaude } from './calendar.js';
 import { callClaude } from './claude.js';
 import { sendMessage } from './whatsapp.js';
 import { buildSystemPrompt } from './utils.js';
+import { serializePending } from './pending.js';
+import { updateUser } from './database.js';
 
 const TITHI_CLAIM_PATTERNS = [
   /\btoday\s+is\s+(a\s+)?(?:beej|bij|chaturdashi|chaumasi|paryushan(?:a)?|ekadashi|atthai|attham|chhath|punam|ashtami|nom|amavasya|purnima|fast day|tithi)\b/i,
@@ -55,6 +57,13 @@ async function answerTithi(phone, user, place, intent, env) {
   const tithiFact = m ? `Today is ${m[1].trim()} 🙏\n\n` : '';
 
   await sendMessage(phone, tithiFact + response, env);
+
+  // Set pending whenever Claude ended with a question so a short reply
+  // ("yes", "sure") is handled with context rather than getting lost.
+  if (response.trimEnd().endsWith('?') || needsFull) {
+    const rec = serializePending({ need: 'tithi_food_followup', intent: { journey: 'tithi', params: {} } });
+    if (rec) await updateUser(phone, { pending_action: rec }, env);
+  }
 }
 
 export async function handleRebuildTithi(phone, text, user, intent, env) {

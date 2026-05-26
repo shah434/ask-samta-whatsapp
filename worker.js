@@ -5,7 +5,7 @@
 // ============================================
 import { classify } from './src/classify.js';
 import { readPending, serializePending } from './src/pending.js';
-import { rulesFor, rulesForNumber, FAST_MENU } from './src/fasting-rules.js';
+import { rulesFor, rulesForNumber, FAST_MENU, UPVAS_MENU } from './src/fasting-rules.js';
 import { handleRebuildSunset, rebuildSunsetClaims } from './src/rebuild-sunset.js';
 import { handleRebuildRestaurant, rebuildRestaurantClaims } from './src/rebuild-restaurant.js';
 import { handleCityUpdate, cityUpdateClaims } from './src/rebuild-city-update.js';
@@ -264,6 +264,43 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
           if (handled) return new Response('OK', { status: 200 });
         }
 
+        // -- Food followup: Claude ended with a question and user replied with a
+        //    short/vague answer. Ask what they meant rather than losing context. --
+        const foodFollowupPending = readPending(user.pending_action);
+        if (
+          foodFollowupPending?.need === 'food_followup' &&
+          /^(yes|yea|yeah|yep|sure|ok|okay|please|sounds good)\b/i.test(text.trim()) &&
+          text.trim().length < 25
+        ) {
+          await updateUser(phone, { pending_action: null }, env);
+          await sendMessage(phone, `What would you like to know? 🙏`, env);
+          return new Response('OK', { status: 200 });
+        }
+        if (foodFollowupPending?.need === 'food_followup') {
+          await updateUser(phone, { pending_action: null }, env);
+          user.pending_action = null;
+        }
+
+        // -- Tithi food followup: user got an upcoming-tithis list and replied
+        //    with a short/vague answer ("sure", "yes"). Ask a clarifying question
+        //    so the context isn't lost. A specific reply ("what can I eat on
+        //    Chaudas") goes straight through normal routing below. ---------------
+        const tithiFoodFollowupPending = readPending(user.pending_action);
+        if (
+          tithiFoodFollowupPending?.need === 'tithi_food_followup' &&
+          /^(yes|yea|yeah|yep|sure|ok|okay|please|sounds good)\b/i.test(text.trim()) &&
+          text.trim().length < 25
+        ) {
+          await updateUser(phone, { pending_action: null }, env);
+          await sendMessage(phone, `Sure! Are you asking about *pachkhan* for a specific day, or want to know *what you can eat* on one of those tithis? 🙏`, env);
+          return new Response('OK', { status: 200 });
+        }
+        // Clear stale tithi_food_followup if the user sends a real message
+        if (tithiFoodFollowupPending?.need === 'tithi_food_followup') {
+          await updateUser(phone, { pending_action: null }, env);
+          user.pending_action = null;
+        }
+
         // -- Tithi followup: user said "yes" after sunset offered a fast check --
         const tithiFollowupPending = readPending(user.pending_action);
         if (
@@ -329,12 +366,27 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
           }
         }
 
-        // -- Code-driven fasting (flat 1-7; option 8 → prompt) -------------
+        // -- Code-driven fasting (flat menu; option 8 → prompt) ------------
         const fastPending = readPending(user.pending_action);
         const reply = text.trim();
 
+        // Upvas type pick: user was asked Chovihar or Tivihar and replied
+        if (fastPending && fastPending.need === 'upvas_pick') {
+          const norm = reply.toLowerCase();
+          const isChovihar = /^1$|chovihar|chauvihar/.test(norm);
+          const isTivihar  = /^2$|tivihar/.test(norm);
+          if (isChovihar || isTivihar) {
+            await updateUser(phone, { pending_action: null }, env);
+            await sendMessage(phone, rulesFor(isChovihar ? 'upvas_chovihar' : 'upvas_tivihar'), env);
+            return new Response('OK', { status: 200 });
+          }
+          // Unrecognised reply — clear pending and fall through to normal routing
+          await updateUser(phone, { pending_action: null }, env);
+          user.pending_action = null;
+        }
+
         if (fastPending && fastPending.need === 'fast_pick') {
-          if (/^[1-7]$/.test(reply)) {
+          if (/^[1-8]$/.test(reply)) {
             const rules = rulesForNumber(parseInt(reply, 10));
             if (rules) {
               await updateUser(phone, { pending_action: null }, env);
@@ -343,14 +395,22 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
             }
           }
           if (rbIntent.params.fast_term && rbIntent.params.fast_term !== 'pachkhan_general') {
-            const rules = rulesFor(rbIntent.params.fast_term);
+            const ft = rbIntent.params.fast_term;
+            // Bare upvas from inside the fast menu → ask sub-type
+            if (ft === 'upvas') {
+              const rec = serializePending({ need: 'upvas_pick', intent: rbIntent });
+              await updateUser(phone, { pending_action: rec }, env);
+              await sendMessage(phone, UPVAS_MENU, env);
+              return new Response('OK', { status: 200 });
+            }
+            const rules = rulesFor(ft);
             if (rules) {
               await updateUser(phone, { pending_action: null }, env);
               await sendMessage(phone, rules, env);
               return new Response('OK', { status: 200 });
             }
           }
-          if (reply === '8') {
+          if (reply === '9') {
             await updateUser(phone, { pending_action: null }, env);
           }
         }
@@ -361,6 +421,13 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
             const rec = serializePending({ need: 'fast_pick', intent: rbIntent });
             await updateUser(phone, { pending_action: rec }, env);
             await sendMessage(phone, FAST_MENU, env);
+            return new Response('OK', { status: 200 });
+          }
+          // Bare "upvas" (no chovihar/tivihar specified) → ask sub-type
+          if (ft === 'upvas') {
+            const rec = serializePending({ need: 'upvas_pick', intent: rbIntent });
+            await updateUser(phone, { pending_action: rec }, env);
+            await sendMessage(phone, UPVAS_MENU, env);
             return new Response('OK', { status: 200 });
           }
           const rules = rulesFor(ft);

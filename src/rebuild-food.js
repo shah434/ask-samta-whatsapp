@@ -147,9 +147,10 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
   const needsStrictnessAsk =
     baseGuard && isStrictnessSensitive && levelsShown > 1;          // Trigger A
   const proactiveStrictnessAsk =
-    baseGuard && (user.message_count || 0) >= 2 && !needsStrictnessAsk; // Trigger B
+    baseGuard && (user.message_count || 0) >= 3 && !needsStrictnessAsk; // Trigger B
 
-  if (needsStrictnessAsk || proactiveStrictnessAsk) {
+  const setPendingThisTurn = needsStrictnessAsk || proactiveStrictnessAsk;
+  if (setPendingThisTurn) {
     cleanResponse += '\n\n' + getStrictnessQuestion();
     cleanResponse += '\n\n💡 Type *help* anytime to see what else I can do.';
     const rec = serializePending({ need: 'strictness', intent });
@@ -159,6 +160,15 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
   // -- Send ------------------------------------------------------------------
   if (!cleanResponse) cleanResponse = "Let me know what you'd like to check 🙏";
   await sendMessage(phone, tithiFact + cleanResponse, env);
+
+  // -- Food follow-up pending ------------------------------------------------
+  // If Claude ended with a question and no other pending was set this turn,
+  // store a food_followup so a short reply ("sure", "yes") doesn't fall into
+  // a dead-end food classify with no context.
+  if (!setPendingThisTurn && cleanResponse.trimEnd().endsWith('?')) {
+    const rec = serializePending({ need: 'food_followup', intent });
+    if (rec) await updateUser(phone, { pending_action: rec }, env);
+  }
   console.log(`[perf] sent=${Date.now() - t0}ms TOTAL`);
 
   // -- History (deferred) ----------------------------------------------------

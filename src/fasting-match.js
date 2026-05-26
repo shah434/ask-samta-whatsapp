@@ -26,6 +26,9 @@ const FAST_TERMS = {
   // Specific fast types
   upvas: 'upvas',
   upavas: 'upvas',
+  'upvas tivihar': 'upvas_tivihar',
+  'upvas chovihar': 'upvas_chovihar',
+  'upvas chauvihar': 'upvas_chovihar',
   ekasan: 'ekasan',
   ekasana: 'ekasan',
   ekashan: 'ekasan',
@@ -102,6 +105,17 @@ const NORMALIZED_TERMS = Object.entries(FAST_TERMS).map(
  */
 export function detectFastTerm(text) {
   if (!text) return { matched: false, category: null, term: null, matchedToken: null };
+
+  // Pre-pass: detect compound "upvas chovihar" / "upvas tivihar" before
+  // the token loop, which would greedily return 'upvas' on the first token.
+  if (/\bupvas\b.{0,20}\b(chovihar|chauvihar|chauvihaar)\b/i.test(text) ||
+      /\b(chovihar|chauvihar|chauvihaar)\b.{0,20}\bupvas\b/i.test(text)) {
+    return { matched: true, category: 'upvas_chovihar', term: 'upvas chovihar', matchedToken: 'upvas chovihar' };
+  }
+  if (/\bupvas\b.{0,20}\b(tivihar|tivihaar)\b/i.test(text) ||
+      /\b(tivihar|tivihaar)\b.{0,20}\bupvas\b/i.test(text)) {
+    return { matched: true, category: 'upvas_tivihar', term: 'upvas tivihar', matchedToken: 'upvas tivihar' };
+  }
 
   const tokens = text.split(/[\s,.\?!;:()\[\]"']+/).filter(Boolean);
   let general = null; // remember a pachkhan_general hit, but keep looking for specific
