@@ -142,15 +142,6 @@ is mentioned in their message:
   different city anytime to search elsewhere."
 - If City is not stored: ask for it
 
-If user mentions a new city anywhere in their message:
-- Use the new city for the current query
-- Add at end of response (never mention the tag):
-  [CITY_UPDATE: cityname]
-- Confirm naturally: "Got it — updated your city to [city]."
-
-Never show the tag to the user.
-Only one city update per response.
-
 ACCOUNT DELETION:
 If a user asks how to delete their account, remove their data,
 or stop using the service, reply with exactly:

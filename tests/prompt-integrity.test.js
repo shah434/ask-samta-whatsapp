@@ -35,9 +35,6 @@ describe('CORE_IDENTITY — always-banned food override', () => {
     expect(CORE_IDENTITY).toContain('Name nothing else');
   });
 
-  it('contains city update tag format', () => {
-    expect(CORE_IDENTITY).toContain('[CITY_UPDATE:');
-  });
 });
 
 // ── RULES_JAIN ──────────────────────────────────────────────────────────────
