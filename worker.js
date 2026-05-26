@@ -264,6 +264,24 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
           if (handled) return new Response('OK', { status: 200 });
         }
 
+        // -- Tithi followup: user said "yes" after sunset offered a fast check --
+        const tithiFollowupPending = readPending(user.pending_action);
+        if (
+          tithiFollowupPending?.need === 'tithi_followup' &&
+          /^(yes|yea|yeah|yep|sure|ok|okay|please)\b/i.test(text.trim()) &&
+          text.trim().length < 20
+        ) {
+          await updateUser(phone, { pending_action: null }, env);
+          user.pending_action = null;
+          const tithiIntent = {
+            journey: 'tithi',
+            params: { original_text: 'Is today a fast day?' },
+            prompt_blocks: ['calendar'],
+          };
+          const handled = await handleRebuildTithi(phone, text, user, tithiIntent, env);
+          if (handled) return new Response('OK', { status: 200 });
+        }
+
         // -- Tithi / calendar -------------------------------------------------
         if (tithiClaims(user, rbIntent, text)) {
           const handled = await handleRebuildTithi(phone, text, user, rbIntent, env);

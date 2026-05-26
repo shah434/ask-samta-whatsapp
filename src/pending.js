@@ -34,7 +34,7 @@ const ALLOWED_JOURNEYS = new Set([
 ]);
 
 // The fields a journey can be waiting on.
-const ALLOWED_NEEDS = new Set(['city', 'strictness', 'city_pick', 'fast_pick']);
+const ALLOWED_NEEDS = new Set(['city', 'strictness', 'city_pick', 'fast_pick', 'tithi_followup']);
 // ── Serialize ───────────────────────────────────────────────────────────────
 // Build the JSON string to store in users.pending_action.
 // Returns null if the input is structurally invalid — callers should treat a

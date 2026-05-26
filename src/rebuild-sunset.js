@@ -14,6 +14,8 @@ import { getSunForPlace, formatSunDataForClaude } from './sunset.js';
 import { sendMessage } from './whatsapp.js';
 import { callClaude } from './claude.js';
 import { buildSystemPrompt } from './utils.js';
+import { serializePending } from './pending.js';
+import { updateUser } from './database.js';
 
 export function rebuildSunsetClaims(user, intent, text) {
   return cityJourneyClaims(user, intent, 'sunset', text);
@@ -31,6 +33,13 @@ async function answerSunset(phone, user, place, intent, env) {
   const when = intent.params?.sun_date === 'tomorrow' ? ' tomorrow' : '';
   const reply = await callClaude([{ role: 'user', content: `${kind}${when}` }], system, env);
   await sendMessage(phone, reply, env);
+
+  // Offer a tithi check after today's sunset (Jain only, not for tomorrow queries).
+  // Stores a pending so "yes/yea/sure" on the next turn routes to answerTithi.
+  if (user.community !== 'baps' && !intent.params?.sun_date) {
+    const rec = serializePending({ need: 'tithi_followup', intent: { journey: 'tithi', params: {} } });
+    if (rec) await updateUser(phone, { pending_action: rec }, env);
+  }
 }
 
 export async function handleRebuildSunset(phone, text, user, intent, env) {

@@ -861,4 +861,7 @@ If no city is stored and none in the message, ask:
 
 After giving the time, add one short line:
 "Your saved city is [City]. Send a different city anytime to switch."
+
+For Jain users only, also add on a new line after the city line:
+"Want me to check if today is a fast day?"
 `;

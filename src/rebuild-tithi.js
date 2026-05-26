@@ -61,7 +61,7 @@ export async function handleRebuildTithi(phone, text, user, intent, env) {
   // Stash the original question in intent params so answerTithi can use it
   // after the city resolution (which may happen on a later turn).
   if (!intent.params) intent.params = {};
-  intent.params.original_text = text;
+  if (!intent.params.original_text) intent.params.original_text = text;
 
   return handleCityJourney(phone, text, user, intent, env, {
     name: 'tithi',
