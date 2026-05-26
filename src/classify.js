@@ -245,6 +245,7 @@ export function classify(message, hasImage = false) {
   if (isSunset) {
     intent.journey = 'sunset';
     intent.params.sun_kind = RE_SUNRISE.test(lower) ? 'sunrise' : 'sunset';
+    if (/\btomorrow\b/i.test(lower)) intent.params.sun_date = 'tomorrow';
     const city = extractCityRaw(text);
     if (city) intent.params.city_raw = city;
     intent.prompt_blocks = ['calendar'];

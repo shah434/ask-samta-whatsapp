@@ -20,14 +20,14 @@ export function rebuildSunsetClaims(user, intent, text) {
 }
 
 async function answerSunset(phone, user, place, intent, env) {
-  const sunInfo = await getSunForPlace(place);
+  const sunInfo = await getSunForPlace(place, intent.params?.sun_date || null);
   if (!sunInfo) {
     await sendMessage(phone, `Sorry — I couldn't look up that city right now. Please try again in a moment 🙏`, env);
     return;
   }
   const sunData = formatSunDataForClaude(sunInfo);
   const system = buildSystemPrompt(user, '', sunData);
-  const reply = await callClaude([{ role: 'user', content: 'sunset' }], system, env);
+  const reply = await callClaude([{ role: 'user', content: intent.params?.sun_date === 'tomorrow' ? 'sunset tomorrow' : 'sunset' }], system, env);
   await sendMessage(phone, reply, env);
 }
 

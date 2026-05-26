@@ -89,11 +89,18 @@ export async function geocodeCity(city) {
  * Fetch sunrise/sunset for an already-resolved place object.
  * Returns { city, sunrise, sunset, timezoneId } or null on failure.
  */
-export async function getSunForPlace(place) {
+export async function getSunForPlace(place, date = null) {
   try {
-    const today = new Date().toISOString().split('T')[0];
-    const sunUrl = `https://api.sunrise-sunset.org/json?lat=${place.latitude}&lng=${place.longitude}&date=${today}&formatted=0`;
-    console.log(`[sun] lookup name=${place.name} lat=${place.latitude} lng=${place.longitude} tz=${place.timezone}`);
+    let dateStr;
+    if (date === 'tomorrow') {
+      const d = new Date();
+      d.setDate(d.getDate() + 1);
+      dateStr = d.toISOString().split('T')[0];
+    } else {
+      dateStr = new Date().toISOString().split('T')[0];
+    }
+    const sunUrl = `https://api.sunrise-sunset.org/json?lat=${place.latitude}&lng=${place.longitude}&date=${dateStr}&formatted=0`;
+    console.log(`[sun] lookup name=${place.name} lat=${place.latitude} lng=${place.longitude} tz=${place.timezone} date=${dateStr}`);
 
     const sunRes = await fetch(sunUrl);
     if (!sunRes.ok) {
