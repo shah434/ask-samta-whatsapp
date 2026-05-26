@@ -14,6 +14,7 @@ You can ask me things like:
 - What time is sunrise / sunset?
 - What can I eat during fast?
 - Find Jain/vegetarian restaurants near me
+- Find Jain temples / mandirs near me
 - What can I substitute for onion?
 - Are the ingredients in this food or supplement safe?
 
