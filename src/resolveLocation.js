@@ -51,17 +51,35 @@ export async function resolveLocation(cityRaw) {
   if (NON_CITIES.includes(raw.toLowerCase())) return { status: 'missing' };
 
   try {
-    // Extract a trailing 2-letter state/region code BEFORE stripping it,
-    // so we can use it to narrow ambiguous results after geocoding.
+    // Extract a trailing state qualifier BEFORE stripping it, so we can use
+    // it to narrow ambiguous geocoder results after the search.
+    // Handles both 2-letter codes ("savannah, ga") and full names ("savannah, georgia").
     const stateMatch = raw.match(/[,\s]+([A-Z]{2})$/i);
     const stateCode = stateMatch ? stateMatch[1].toLowerCase() : null;
-    const stateName = stateCode ? (US_STATES[stateCode] || null) : null;
+    let stateName = stateCode ? (US_STATES[stateCode] || null) : null;
 
-    const cleanCity = raw
+    // Fall back to full state name match if no 2-letter code found.
+    let fullStateStrip = null;
+    if (!stateName) {
+      for (const sName of Object.values(US_STATES)) {
+        if (new RegExp(`[,\\s]+${sName}\\s*$`, 'i').test(raw)) {
+          stateName = sName;
+          fullStateStrip = sName;
+          break;
+        }
+      }
+    }
+
+    let cleanCity = raw
       .replace(/,\s*[A-Z]{2}$/i, '')   // strip ", NY" style 2-letter state codes
       .replace(/\s+[A-Z]{2}$/i, '')    // strip " NY" style (no comma) — e.g. "columbus oh"
       .replace(/,/g, ' ')
       .trim();
+
+    // Strip full state name when it was used ("savannah georgia" → "savannah").
+    if (fullStateStrip) {
+      cleanCity = cleanCity.replace(new RegExp(`\\s+${fullStateStrip}\\s*$`, 'i'), '').trim();
+    }
 
     const url = `${GEOCODE_URL}?name=${encodeURIComponent(cleanCity)}&count=5&language=en&format=json`;
     const res = await fetch(url);

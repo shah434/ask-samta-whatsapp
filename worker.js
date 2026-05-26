@@ -268,10 +268,19 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
         // → ambiguous message. Ask Haiku for the journey + city, then re-route
         // city journeys through the same handlers (pending/resume stays intact).
         // Guard: skip if text is too short to be meaningful (avoids wasting a Haiku call).
+        // Guard: skip if a city-need is already pending — the text is almost
+        // certainly a city reply that the claim gate missed (e.g. KV staleness).
+        // Sending it to routeFallback would hijack the pending journey (Haiku
+        // sees a bare city name and routes it to sunset or restaurant instead).
+        const pendingNeedsCity = (() => {
+          const p = readPending(user.pending_action);
+          return p && (p.need === 'city' || p.need === 'city_pick');
+        })();
         const ambiguous = rbIntent.journey === 'food'
           && !rbIntent.params.food_text
           && !rbIntent.params.has_image
-          && text.trim().length >= 3;
+          && text.trim().length >= 3
+          && !pendingNeedsCity;
         if (ambiguous) {
           const r = await routeFallback(text, env);
           if (r && (r.journey === 'restaurant' || r.journey === 'sunset')) {
