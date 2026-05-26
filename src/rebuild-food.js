@@ -126,19 +126,30 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
       || "Let me know what you'd like to check 🙏";
   }
 
-  // -- Strictness ask (once per session) -------------------------------------
+  // -- Strictness ask --------------------------------------------------------
+  // Two triggers, same action. Only one fires per message.
+  //
+  // Trigger A (reactive): Claude gave a dual-verdict (strict vs moderate vs
+  // flexible levels visible in the reply) — ask right after that response.
+  //
+  // Trigger B (proactive): User has sent ≥ 2 food messages (proxy for ~10 min
+  // of use) and still has no strictness set — append the question once so we
+  // learn their level before the session goes on too long.
   const isStrictnessSensitive = intent.prompt_blocks.some(b => STRICTNESS_SENSITIVE.has(b));
   const levelsShown = [/\bif strict\b/i, /\bif moderate\b/i, /\bif flexible\b/i]
     .filter(re => re.test(cleanResponse)).length;
   const alreadyAskedStrictness = readPending(user.pending_action)?.need === 'strictness';
-  const needsStrictnessAsk = !user.strictness
+  const baseGuard = !user.strictness
     && !alreadyAskedStrictness
-    && isStrictnessSensitive
     && !intent.prompt_blocks.includes('fasting')
-    && !isLikelyGreeting(text)
-    && levelsShown > 1;
+    && !isLikelyGreeting(text);
 
-  if (needsStrictnessAsk) {
+  const needsStrictnessAsk =
+    baseGuard && isStrictnessSensitive && levelsShown > 1;          // Trigger A
+  const proactiveStrictnessAsk =
+    baseGuard && (user.message_count || 0) >= 2 && !needsStrictnessAsk; // Trigger B
+
+  if (needsStrictnessAsk || proactiveStrictnessAsk) {
     cleanResponse += '\n\n' + getStrictnessQuestion();
     cleanResponse += '\n\n💡 Type *help* anytime to see what else I can do.';
     const rec = serializePending({ need: 'strictness', intent });
