@@ -861,13 +861,4 @@ If no city is stored and none in the message, ask:
 
 After giving the time, add one short line:
 "Your saved city is [City]. Send a different city anytime to switch."
-
-SUNSET/SUNRISE FOLLOW-UP:
-After sunrise or sunset, ask softly:
-"Want me to check if today's a fast day?"
-
-If user says yes:
-- Check JAIN CALENDAR data in the prompt for today's tithi
-- Report it warmly in 2 lines max
-- If no entry: "Today's not a special day — let me know if you're thinking of starting a fast 🙏"
 `;

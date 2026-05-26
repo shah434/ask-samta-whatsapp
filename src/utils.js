@@ -64,7 +64,7 @@ Today's date: ${today}`;
 
   // History — skip entirely for first-turn users.
   const truncQ = (s) => s && s.length > 80  ? s.slice(0, 80)  + '…' : (s || '');
-  const truncA = (s) => s && s.length > 120 ? s.slice(0, 120) + '…' : (s || '');
+  const truncA = (s) => s && s.length > 250 ? s.slice(0, 250) + '…' : (s || '');
   const history = user.history_1_q ? `
 CONVERSATION HISTORY (most recent last):
 Q1: ${truncQ(user.history_3_q)} A1: ${truncA(user.history_3_a)}
