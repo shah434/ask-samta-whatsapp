@@ -282,7 +282,11 @@ export function classify(message, hasImage = false) {
 
   // 9. PACHKHAN — fast present but NO specific food: asking the rules.
   //    ("what is ayambil", "what can I eat during upvas", bare-ish fast Q)
-  if (hasFast) {
+  //    Guard: "is today a fast day?" / "is today fasting?" are calendar queries
+  //    (they need city → timezone → date), not rules queries. The word "fast"
+  //    in that phrase fires RE_ENGLISH_FAST, but the intent is tithi → step 10.
+  const isAskingIfTodayFast = /\b(is today|today is|what.*(today|day is))\b/i.test(lower);
+  if (hasFast && !isAskingIfTodayFast) {
     intent.journey = 'pachkhan';
     if (fast.matched) intent.params.fast_term = fast.category;
     intent.prompt_blocks = ['fasting'];
