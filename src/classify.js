@@ -58,6 +58,7 @@ const BARE_TOPIC = {
 
 // ── Keyword sets ────────────────────────────────────────────────────────────
 const RE_RESTAURANT = /\b(restaurant|restaurants|eat near|food near|where to eat|where can i eat|find jain|find baps|places to eat|somewhere to eat)\b/i;
+const RE_TEMPLE     = /\b(temple|mandir|derasar|upashray|jain center|jain centre|baps center|baps centre|find.*temple|find.*mandir|temple near|mandir near)\b/i;
 const RE_SUBSTITUTE = /\b(substitute|substitution|alternative|alternatives|instead of|replace|replacement|swap)\b/i;
 const RE_MEDICINE   = /\b(medicine|medication|supplement|capsule|tablet|drug|pill|pharma|prescription|vitamin|tablets|capsules)\b/i;
 const RE_SUNSET     = /\b(sunset|sun set|when does the sun set|what time.*sun.*down)\b/i;
@@ -200,7 +201,8 @@ export function classify(message, hasImage = false) {
   const hasFast = fast.matched || englishFast;
   const hasFoodIntent = RE_FOOD_INTENT.test(lower);
   const isSunset = RE_SUNSET.test(lower) || RE_SUNRISE.test(lower);
-  const isRestaurant = RE_RESTAURANT.test(lower);
+  const isRestaurant = RE_RESTAURANT.test(lower) || RE_TEMPLE.test(lower);
+  const isTemple     = RE_TEMPLE.test(lower);
   const isSubstitute = RE_SUBSTITUTE.test(lower);
   const isMedicine = RE_MEDICINE.test(lower);
   const isCalendar = RE_CALENDAR.test(lower);
@@ -252,11 +254,12 @@ export function classify(message, hasImage = false) {
     return intent;
   }
 
-  // 7. RESTAURANT — location-finding journey.
+  // 7. RESTAURANT / TEMPLE — location-finding journey.
   if (isRestaurant) {
     intent.journey = 'restaurant';
     const city = extractCityRaw(text);
     if (city) intent.params.city_raw = city;
+    if (isTemple) intent.params.place_type = 'temple';
     intent.prompt_blocks = ['restaurant'];
     return intent;
   }

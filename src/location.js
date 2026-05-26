@@ -32,6 +32,34 @@ export async function searchRestaurants(communityQuery, location, env) {
   return data.places || [];
 }
 
+export async function searchTemples(community, location, env) {
+  const query = community === 'baps'
+    ? `BAPS Swaminarayan mandir temple ${location}`
+    : `Jain temple derasar mandir ${location}`;
+  const res = await fetch(
+    'https://places.googleapis.com/v1/places:searchText',
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': env.GOOGLE_PLACES_KEY,
+        'X-Goog-FieldMask': [
+          'places.displayName',
+          'places.formattedAddress',
+          'places.rating',
+          'places.regularOpeningHours',
+          'places.nationalPhoneNumber',
+          'places.websiteUri'
+        ].join(',')
+      },
+      body: JSON.stringify({ textQuery: query, maxResultCount: 5 })
+    }
+  );
+  const data = await res.json();
+  console.log(`[places] temple query="${query}" status=${res.status}`);
+  return data.places || [];
+}
+
 export function detectLocation(text) {
   const lower = text.toLowerCase();
 
