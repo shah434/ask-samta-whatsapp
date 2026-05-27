@@ -23,7 +23,7 @@ export function tithiClaims(user, intent, text) {
 
 async function answerTithi(phone, user, place, intent, env) {
   const calendarEvents = await getCalendarCached(env); // KV hit, ~5ms
-  const needsFull = /paryushana|coming|upcoming|next|when/i.test(intent.params?.original_text || '');
+  const needsFull = /paryushana|coming|upcoming|next|when|week|wk/i.test(intent.params?.original_text || '');
   const calendarData = user.community === 'jain'
     ? formatEventsForClaude(calendarEvents, place.timezone, needsFull ? 10 : 3)
     : '';

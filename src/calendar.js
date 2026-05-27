@@ -171,12 +171,17 @@ TODAY_TITHI_NAME: ${todayEvent.summary}`
   const thisWeek = upcoming.filter(e => e.date < cutoff);
   const later    = upcoming.filter(e => e.date >= cutoff);
 
+  // Explicit boolean flag — Claude reads this, never counts dates itself.
+  // Same pattern as TODAY_IS_TITHI: true/false.
+  const hasThisWeek = thisWeek.length > 0;
+
   const thisWeekLines = thisWeek.length ? thisWeek.map(fmtEvent).join('\n') : 'none';
   const laterLines    = later.length    ? later.map(fmtEvent).join('\n')    : 'none';
 
   return `${todayLine}
-UPCOMING_THIS_WEEK (today+1 through today+6, NOT today — list these when user asks about this week):
+THIS_WEEK_HAS_TITHIS: ${hasThisWeek ? 'true' : 'false'}
+UPCOMING_THIS_WEEK (within 7 days, NOT today):
 ${thisWeekLines}
-UPCOMING_LATER (beyond 7 days — only mention if THIS_WEEK is none):
+UPCOMING_LATER (beyond 7 days):
 ${laterLines}`;
 }
