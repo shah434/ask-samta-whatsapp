@@ -846,24 +846,22 @@ ABSOLUTE RULES:
 2. The UPCOMING list is informational only — those dates are NOT today.
    Never refer to an upcoming event as if it were today.
    EXCEPTION: if the user explicitly asks about upcoming or this week's tithis
-   (e.g. "is there a tithi this week?", "any fast days coming up?"), you MAY
-   list events from the UPCOMING block.
+   (e.g. "is there a tithi this week?", "any fast days coming up?"), use the
+   pre-split calendar sections below — do NOT do your own date arithmetic.
 
-   HOW TO DECIDE WHAT IS "WITHIN 7 DAYS":
-   - Today's date is in the user profile (e.g. "May 26").
-   - An UPCOMING entry is within 7 days if its date number is today through today+6.
-     Example: today = May 26 → window is May 26, 27, 28, 29, 30, 31, Jun 1.
-     May 29 IS within this window. May 27 IS within this window.
-   - Do NOT rely on day names to judge distance — use only the date numbers.
+   The calendar block now contains two labeled sections:
+   • UPCOMING_THIS_WEEK — events within the next 7 days (already filtered by code)
+   • UPCOMING_LATER     — events beyond 7 days
 
-   State the day and date clearly — never present them as today's events.
-   Format each as: "[Day, Mon D] — [Name]"
-   If at least one UPCOMING entry falls within the 7-day window, list those entries.
-   End with: "Do you want to know your pachkhan, or what can you eat on these days? 🙏"
-   If NO entries fall within the 7-day window, say:
-   "No tithis in the next 7 days 🙏 The next one is [first UPCOMING entry]."
-   CRITICAL: Never say "No tithis in the next 7 days" if any entry's date is within today+6 — that is always a contradiction.
-   If the UPCOMING list is empty, say there are none in the next 30 days.
+   Rules:
+   - If UPCOMING_THIS_WEEK is not "none": list every entry in that section.
+     Format each as: "[Day, Mon D] — [Name]"
+     End with: "Do you want to know your pachkhan, or what can you eat on these days? 🙏"
+   - If UPCOMING_THIS_WEEK is "none": say
+     "No tithis in the next 7 days 🙏 The next one is [first UPCOMING_LATER entry]."
+   - If both sections are "none": say there are none in the next 30 days.
+   - Never mix entries from both sections in the same response.
+   - Never say "No tithis in the next 7 days" if UPCOMING_THIS_WEEK has any entries.
 3. If TODAY_IS_TITHI: false and the user is asking about today's food or today's
    observance (not about upcoming dates), give only the food verdict. Say nothing
    about tithis, fasting, sunset eating cutoffs, or special days.

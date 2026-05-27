@@ -154,21 +154,29 @@ UPCOMING (informational only, NOT today): none`;
 TODAY_TITHI_NAME: ${todayEvent.summary}`
     : `TODAY_IS_TITHI: false`;
 
-  // Upcoming line — labeled so Claude can't mistake a future event for today
-  const upcomingLines = upcoming.length
-    ? upcoming.map(event => {
-        // ICS all-day events are stored as UTC midnight (new Date(y,m,d) in a
-        // UTC-local environment). Formatting in any behind-UTC timezone shifts
-        // the instant to the previous day at 8/9 PM — showing the wrong date.
-        // Always format in UTC so the calendar date is preserved exactly.
-        const label = event.date.toLocaleDateString('en-US', {
-          weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC'
-        });
-        return `${label}: ${event.summary}`;
-      }).join('\n')
-    : 'none';
+  // Split upcoming into this-week (today+1 through today+6) vs later.
+  // Do this in code so Claude never has to count dates itself.
+  const cutoff = new Date(today);
+  cutoff.setDate(cutoff.getDate() + 7); // exclusive upper bound (today+7)
+
+  function fmtEvent(event) {
+    // ICS all-day events are stored as UTC midnight. Formatting in any
+    // behind-UTC timezone shifts to the previous day. Always use UTC.
+    const label = event.date.toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC'
+    });
+    return `${label}: ${event.summary}`;
+  }
+
+  const thisWeek = upcoming.filter(e => e.date < cutoff);
+  const later    = upcoming.filter(e => e.date >= cutoff);
+
+  const thisWeekLines = thisWeek.length ? thisWeek.map(fmtEvent).join('\n') : 'none';
+  const laterLines    = later.length    ? later.map(fmtEvent).join('\n')    : 'none';
 
   return `${todayLine}
-UPCOMING (informational only, NOT today):
-${upcomingLines}`;
+UPCOMING_THIS_WEEK (today+1 through today+6, NOT today — list these when user asks about this week):
+${thisWeekLines}
+UPCOMING_LATER (beyond 7 days — only mention if THIS_WEEK is none):
+${laterLines}`;
 }
