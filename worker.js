@@ -162,7 +162,10 @@ export default {
       const t0 = Date.now();
 
       if (messageType === 'image') {
-        sendMessage(phone, 'Reviewing your request... 🔍', env);
+        // Fire-and-forget: we want this to send before awaiting Phase 1 I/O,
+        // so it's intentionally not awaited. ctx.waitUntil not needed — the
+        // Worker stays alive for the main await chain that follows.
+        void sendMessage(phone, 'Reviewing your request... 🔍', env);
       }
 
       // -- Phase 1: Parallel I/O ---------------------------------------------
@@ -247,7 +250,8 @@ export default {
           const handled = await handleRebuildSunset(phone, text, user, rbIntent, env);
           if (handled) return new Response('OK', { status: 200 });
         }
-if (rebuildRestaurantClaims(user, rbIntent, text)) {
+
+        if (rebuildRestaurantClaims(user, rbIntent, text)) {
           const handled = await handleRebuildRestaurant(phone, text, user, rbIntent, env);
           if (handled) return new Response('OK', { status: 200 });
         }
@@ -264,50 +268,39 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
           if (handled) return new Response('OK', { status: 200 });
         }
 
-        // -- Food followup: Claude ended with a question and user replied with a
-        //    short/vague answer. Ask what they meant rather than losing context. --
-        const foodFollowupPending = readPending(user.pending_action);
-        if (
-          foodFollowupPending?.need === 'food_followup' &&
-          /^(yes|yea|yeah|yep|sure|ok|okay|please|sounds good)\b/i.test(text.trim()) &&
-          text.trim().length < 25
-        ) {
-          await updateUser(phone, { pending_action: null }, env);
-          await sendMessage(phone, `What would you like to know? 🙏`, env);
-          return new Response('OK', { status: 200 });
-        }
-        if (foodFollowupPending?.need === 'food_followup') {
+        // Parse pending once — used by all followup handlers below.
+        // Handlers that clear pending also set user.pending_action = null so
+        // subsequent checks in this same request see the updated value.
+        const pending = readPending(user.pending_action);
+        const trimmed = text.trim();
+        const isShortAffirmative = (maxLen) =>
+          /^(yes|yea|yeah|yep|sure|ok|okay|please|sounds good)\b/i.test(trimmed) &&
+          trimmed.length < maxLen;
+
+        // -- Food followup: Claude ended with a question, user replied vaguely --
+        if (pending?.need === 'food_followup') {
+          if (isShortAffirmative(25)) {
+            await updateUser(phone, { pending_action: null }, env);
+            await sendMessage(phone, `What would you like to know? 🙏`, env);
+            return new Response('OK', { status: 200 });
+          }
           await updateUser(phone, { pending_action: null }, env);
           user.pending_action = null;
         }
 
-        // -- Tithi food followup: user got an upcoming-tithis list and replied
-        //    with a short/vague answer ("sure", "yes"). Ask a clarifying question
-        //    so the context isn't lost. A specific reply ("what can I eat on
-        //    Chaudas") goes straight through normal routing below. ---------------
-        const tithiFoodFollowupPending = readPending(user.pending_action);
-        if (
-          tithiFoodFollowupPending?.need === 'tithi_food_followup' &&
-          /^(yes|yea|yeah|yep|sure|ok|okay|please|sounds good)\b/i.test(text.trim()) &&
-          text.trim().length < 25
-        ) {
-          await updateUser(phone, { pending_action: null }, env);
-          await sendMessage(phone, `Sure! Are you asking about *pachkhan* for a specific day, or want to know *what you can eat* on one of those tithis? 🙏`, env);
-          return new Response('OK', { status: 200 });
-        }
-        // Clear stale tithi_food_followup if the user sends a real message
-        if (tithiFoodFollowupPending?.need === 'tithi_food_followup') {
+        // -- Tithi food followup: user got upcoming list, replied vaguely ------
+        if (pending?.need === 'tithi_food_followup') {
+          if (isShortAffirmative(25)) {
+            await updateUser(phone, { pending_action: null }, env);
+            await sendMessage(phone, `Sure! Are you asking about *pachkhan* for a specific day, or want to know *what you can eat* on one of those tithis? 🙏`, env);
+            return new Response('OK', { status: 200 });
+          }
           await updateUser(phone, { pending_action: null }, env);
           user.pending_action = null;
         }
 
         // -- Tithi followup: user said "yes" after sunset offered a fast check --
-        const tithiFollowupPending = readPending(user.pending_action);
-        if (
-          tithiFollowupPending?.need === 'tithi_followup' &&
-          /^(yes|yea|yeah|yep|sure|ok|okay|please)\b/i.test(text.trim()) &&
-          text.trim().length < 20
-        ) {
+        if (pending?.need === 'tithi_followup' && isShortAffirmative(20)) {
           await updateUser(phone, { pending_action: null }, env);
           user.pending_action = null;
           const tithiIntent = {
@@ -326,17 +319,11 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
         }
 
         // Fallback router: classify defaulted to food with no real food signal
-        // → ambiguous message. Ask Haiku for the journey + city, then re-route
-        // city journeys through the same handlers (pending/resume stays intact).
-        // Guard: skip if text is too short to be meaningful (avoids wasting a Haiku call).
-        // Guard: skip if a city-need is already pending — the text is almost
-        // certainly a city reply that the claim gate missed (e.g. KV staleness).
-        // Sending it to routeFallback would hijack the pending journey (Haiku
-        // sees a bare city name and routes it to sunset or restaurant instead).
-        const pendingNeedsCity = (() => {
-          const p = readPending(user.pending_action);
-          return p && (p.need === 'city' || p.need === 'city_pick');
-        })();
+        // → ambiguous message. Ask Haiku for the journey + city, then re-route.
+        // Guard: skip if a city-need is pending — the reply is almost certainly
+        // a city answer; sending to Haiku would hijack it.
+        const currentPending = readPending(user.pending_action);
+        const pendingNeedsCity = currentPending?.need === 'city' || currentPending?.need === 'city_pick';
         const ambiguous = rbIntent.journey === 'food'
           && !rbIntent.params.food_text
           && !rbIntent.params.has_image
@@ -350,23 +337,14 @@ if (rebuildRestaurantClaims(user, rbIntent, text)) {
               params: r.city ? { city_raw: r.city } : {},
               prompt_blocks: r.journey === 'sunset' ? ['calendar'] : ['restaurant'],
             };
-            if (r.city) {
-              // city present → bypass claim's bare-reply gate, call handler directly
-              const handled = r.journey === 'sunset'
-                ? await handleRebuildSunset(phone, text, user, routed, env)
-                : await handleRebuildRestaurant(phone, text, user, routed, env);
-              if (handled) return new Response('OK', { status: 200 });
-            } else {
-              // no city → handler will ask, using saved city if present
-              const handled = r.journey === 'sunset'
-                ? await handleRebuildSunset(phone, text, user, routed, env)
-                : await handleRebuildRestaurant(phone, text, user, routed, env);
-              if (handled) return new Response('OK', { status: 200 });
-            }
+            const handled = r.journey === 'sunset'
+              ? await handleRebuildSunset(phone, text, user, routed, env)
+              : await handleRebuildRestaurant(phone, text, user, routed, env);
+            if (handled) return new Response('OK', { status: 200 });
           }
         }
 
-        // -- Code-driven fasting (flat menu; option 8 → prompt) ------------
+        // -- Code-driven fasting (flat menu; option 9+ → prompt) -----------
         const fastPending = readPending(user.pending_action);
         const reply = text.trim();
 
