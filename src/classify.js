@@ -113,7 +113,10 @@ function extractCityRaw(text) {
     .replace(/\b(today|tonight|now|currently|please|pls)\b/gi, '')
     .trim();
   const patterns = [
+    // With explicit preposition: "sunset in London", "restaurants near Mumbai"
     /(?:sunset|sunrise|restaurants?|eat|tithi)\s+(?:in|for|at|near)\s+([a-zA-Z][a-zA-Z\s,]+?)(?:\?|$)/i,
+    // Without preposition but with "City, ST" format: "restaurants San Jose, ca"
+    /(?:sunset|sunrise|restaurants?|eat|tithi)\s+([a-zA-Z][a-zA-Z\s]+,\s*[a-zA-Z]{2})\b/i,
     /\bin\s+([a-zA-Z][a-zA-Z\s,]+?)(?:\?|$)/i,
     /\b(\d{5})\b/,
     /\b([A-Z]{1,2}\d{1,2}\s?\d[A-Z]{2})\b/i,
