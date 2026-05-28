@@ -171,15 +171,24 @@ TODAY_TITHI_NAME: ${todayEvent.summary}`
   const thisWeek = upcoming.filter(e => e.date < cutoff);
   const later    = upcoming.filter(e => e.date >= cutoff);
 
-  // Explicit boolean flag — Claude reads this, never counts dates itself.
-  // Same pattern as TODAY_IS_TITHI: true/false.
-  const hasThisWeek = thisWeek.length > 0;
+  // Pre-compute the upcoming answer in code — Claude echoes this verbatim,
+  // no boolean evaluation required. Eliminates the hallucination risk where
+  // the model fires the wrong template despite reading a true/false flag.
+  let upcomingSummary;
+  if (thisWeek.length > 0) {
+    const entries = thisWeek.map(fmtEvent).join(' | ');
+    upcomingSummary = `Tithis this week: ${entries} — Do you want to know what you can eat, or your pachkhan? 🙏`;
+  } else if (later.length > 0) {
+    upcomingSummary = `No tithis in the next 7 days 🙏 The next one is ${fmtEvent(later[0])}.`;
+  } else {
+    upcomingSummary = `No tithis in the next 30 days 🙏`;
+  }
 
   const thisWeekLines = thisWeek.length ? thisWeek.map(fmtEvent).join('\n') : 'none';
   const laterLines    = later.length    ? later.map(fmtEvent).join('\n')    : 'none';
 
   return `${todayLine}
-THIS_WEEK_HAS_TITHIS: ${hasThisWeek ? 'true' : 'false'}
+UPCOMING_SUMMARY: ${upcomingSummary}
 UPCOMING_THIS_WEEK (within 7 days, NOT today):
 ${thisWeekLines}
 UPCOMING_LATER (beyond 7 days):
