@@ -45,7 +45,22 @@ async function answerRestaurant(phone, user, place, intent, env) {
   const communityQuery = user.community === 'baps'
     ? 'BAPS Swaminarayan friendly'
     : 'Jain friendly';
-  const results = await searchRestaurants(communityQuery, loc, env);
+
+  // Run community-specific and Indian vegetarian searches in parallel —
+  // Indian vegetarian restaurants often cater well to Jain/BAPS diets.
+  const [communityResults, indianResults] = await Promise.all([
+    searchRestaurants(communityQuery, loc, env),
+    searchRestaurants('Indian pure vegetarian', loc, env),
+  ]);
+
+  // Merge, deduplicate by display name, cap at 5.
+  const seen = new Set();
+  const results = [...communityResults, ...indianResults].filter(p => {
+    const key = (p.displayName?.text || '').toLowerCase();
+    if (!key || seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 5);
 
   if (!results.length) {
     await sendMessage(phone, `I couldn't find vegetarian-friendly spots in ${loc} right now. Try a nearby larger city 🙏`, env);

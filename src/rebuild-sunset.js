@@ -38,7 +38,10 @@ async function answerSunset(phone, user, place, intent, env) {
   // Stores a pending so "yes/yea/sure" on the next turn routes to answerTithi.
   if (user.community !== 'baps' && !intent.params?.sun_date) {
     const rec = serializePending({ need: 'tithi_followup', intent: { journey: 'tithi', params: {} } });
-    if (rec) await updateUser(phone, { pending_action: rec }, env);
+    if (rec) {
+      await updateUser(phone, { pending_action: rec }, env);
+      console.log(`[sunset] tithi_followup pending set phone=${phone}`);
+    }
   }
 }
 

@@ -179,9 +179,21 @@ export default {
         fetchPendingAction(phone, env),  // always-fresh Supabase read, runs in parallel
       ]);
 
-      // Override the KV-cached pending_action with the always-fresh Supabase value.
-      // undefined means the fetch errored — fall back to KV value rather than null.
-      if (user && freshPending !== undefined) user.pending_action = freshPending;
+      // Reconcile Supabase vs KV:
+      //   undefined         → fetch error; keep KV value as-is
+      //   { exists: false } → ghost user: Supabase row was deleted but KV still has stale data.
+      //                       Delete the KV entry and fall into new-user creation below.
+      //   { exists: true }  → normal: override KV pending_action with always-fresh Supabase value
+      if (freshPending === undefined) {
+        // fetch errored — keep whatever KV has
+      } else if (freshPending && !freshPending.exists) {
+        // Ghost user: KV has stale data, Supabase row is gone
+        console.log(`[db] ghost_user phone detected — clearing KV and re-creating`);
+        try { await env.KV.delete(`user:${phone}`); } catch {}
+        user = null; // falls into new-user creation below
+      } else if (freshPending && freshPending.exists && user) {
+        user.pending_action = freshPending.pending_action;
+      }
 
       console.log(`[perf] phase1_parallel=${Date.now() - t0}ms type=${messageType}`);
 
@@ -213,6 +225,7 @@ export default {
       // consistency lag. Previously used a separate KV key which could be
       // invisible to the next request if it landed on a different edge node.
       const pendingDeleteRecord = readPending(user.pending_action);
+      console.log(`[delete] check pending_action=${JSON.stringify(user.pending_action)?.slice(0,80)} need=${pendingDeleteRecord?.need}`);
       if (pendingDeleteRecord?.need === 'delete_confirm' && messageType === 'text') {
         await updateUser(phone, { pending_action: null }, env);
         if (text.trim().toUpperCase() === 'YES') {
@@ -227,6 +240,7 @@ export default {
       // -- "delete me" keyword -----------------------------------------------
       if (messageType === 'text' && text.trim().toLowerCase() === 'delete me') {
         const rec = serializePending({ need: 'delete_confirm', intent: { journey: 'food', params: {} } });
+        console.log(`[delete] setting delete_confirm rec=${rec?.slice(0,60)}`);
         await updateUser(phone, { pending_action: rec }, env);
         await sendImage(
           phone,

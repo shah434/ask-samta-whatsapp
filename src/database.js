@@ -58,6 +58,10 @@ async function mergeUserKVOnly(phone, fields, env) {
 // Fetch pending_action directly from Supabase — always fresh, never stale.
 // Run this in parallel with getUser so it adds no wall-clock latency.
 // The result overwrites user.pending_action from the KV cache.
+// Returns:
+//   { exists: true,  pending_action: string|null } — user found in Supabase
+//   { exists: false }                               — no Supabase row (KV ghost)
+//   undefined                                       — fetch error; caller falls back to KV
 export async function fetchPendingAction(phone, env) {
   try {
     const res = await fetch(
@@ -70,7 +74,13 @@ export async function fetchPendingAction(phone, env) {
       }
     );
     const data = await res.json();
-    return data[0]?.pending_action ?? null;
+    if (!Array.isArray(data) || data.length === 0) {
+      console.log(`[db] fetchPendingAction status=${res.status} rows=0 — ghost user (KV stale)`);
+      return { exists: false };
+    }
+    const pending_action = data[0]?.pending_action ?? null;
+    console.log(`[db] fetchPendingAction status=${res.status} rows=1 val=${JSON.stringify(pending_action)?.slice(0,60)}`);
+    return { exists: true, pending_action };
   } catch (err) {
     console.log(`[cache] fetchPendingAction_error phone=${phone} err=${err.message}`);
     return undefined; // undefined = caller should fall back to KV value
@@ -164,18 +174,26 @@ export async function setFlagKV(phone, fields, env) {
 
 export async function updateUser(phone, fields, env) {
   // 1. Supabase first — source of truth
-  await fetch(
+  const patchRes = await fetch(
     `${env.SUPABASE_URL}/rest/v1/users?phone_number=eq.${phone}`,
     {
       method: 'PATCH',
       headers: {
         apikey: env.SUPABASE_KEY,
         Authorization: `Bearer ${env.SUPABASE_KEY}`,
-        'Content-Type': 'application/json'
+        'Content-Type': 'application/json',
+        Prefer: 'return=representation'
       },
       body: JSON.stringify(fields)
     }
   );
+  const patchBody = await patchRes.json().catch(() => null);
+  const rowsUpdated = Array.isArray(patchBody) ? patchBody.length : '?';
+  if (!patchRes.ok) {
+    console.log(`[db] updateUser_error status=${patchRes.status} fields=${JSON.stringify(Object.keys(fields))} body=${JSON.stringify(patchBody)?.slice(0,200)}`);
+  } else {
+    console.log(`[db] updateUser_ok status=${patchRes.status} fields=${JSON.stringify(Object.keys(fields))} rows=${rowsUpdated}`);
+  }
 
   // 2. Merge fields into KV cache (best effort — non-fatal on failure)
   // Only updates an existing entry; does not create one if absent.
