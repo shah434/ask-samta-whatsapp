@@ -7,7 +7,7 @@
 // Video links are placeholders for now — swap real URLs in RESOURCE below.
 // ============================================
 
-const ELDERS = `Your family's tradition may differ — confirm with your community elders 🙏`;
+const ELDERS = `Your family's tradition may differ — confirm with your community elders 🙏🏾`;
 
 // Per-fast YouTube resource links
 const RESOURCES = {
@@ -43,7 +43,7 @@ export const UPVAS_MENU = `Which type of Upvas?
 1 — Upvas Chovihar (no food, no water at all)
 2 — Upvas Tivihar (no food, boiled water allowed)
 
-Type 1, 2, or the name 🙏`;
+Type 1, 2, or the name 🙏🏾`;
 
 export const FAST_MENU = `What fast are you observing?
 
@@ -56,7 +56,7 @@ export const FAST_MENU = `What fast are you observing?
 7 — Tivihar (nothing after sunset, boiled water ok)
 8 — Navkarsi (no food 48 min after sunrise)
 
-You can also type the name of your fast, or just ask something else 🙏`;
+You can also type the name of your fast, or just ask something else 🙏🏾`;
 
 // Build the full reply for a known flat fast. null if not a flat-menu fast.
 export function rulesFor(category) {

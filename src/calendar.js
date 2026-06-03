@@ -177,11 +177,11 @@ TODAY_TITHI_NAME: ${todayEvent.summary}`
   let upcomingSummary;
   if (thisWeek.length > 0) {
     const entries = thisWeek.map(fmtEvent).join(' | ');
-    upcomingSummary = `Tithis this week: ${entries} — Do you want to know what you can eat, or your pachkhan? 🙏`;
+    upcomingSummary = `Tithis this week: ${entries} — Do you want to know what you can eat, or your pachkhan? 🙏🏾`;
   } else if (later.length > 0) {
-    upcomingSummary = `No tithis in the next 7 days 🙏 The next one is ${fmtEvent(later[0])}.`;
+    upcomingSummary = `No tithis in the next 7 days 🙏🏾 The next one is ${fmtEvent(later[0])}.`;
   } else {
-    upcomingSummary = `No tithis in the next 30 days 🙏`;
+    upcomingSummary = `No tithis in the next 30 days 🙏🏾`;
   }
 
   const thisWeekLines = thisWeek.length ? thisWeek.map(fmtEvent).join('\n') : 'none';

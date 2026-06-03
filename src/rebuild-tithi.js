@@ -49,12 +49,12 @@ async function answerTithi(phone, user, place, intent, env) {
   if (!todayIsTithi && claimsTithiToday) {
     const sentences = response.split(/(?<=[.!?])\s+/);
     response = sentences.filter(s => !TITHI_CLAIM_PATTERNS.some(p => p.test(s))).join(' ').trim()
-      || "Let me know what you'd like to check 🙏";
+      || "Let me know what you'd like to check 🙏🏾";
   }
 
   // Prepend tithi fact if today is a tithi
   const m = calendarData.match(/TODAY_IS_TITHI:\s*true[\s\S]*?TODAY_TITHI_NAME:\s*(.+)/i);
-  const tithiFact = m ? `Today is ${m[1].trim()} 🙏\n\n` : '';
+  const tithiFact = m ? `Today is ${m[1].trim()} 🙏🏾\n\n` : '';
 
   await sendMessage(phone, tithiFact + response, env);
 
@@ -74,7 +74,7 @@ export async function handleRebuildTithi(phone, text, user, intent, env) {
 
   return handleCityJourney(phone, text, user, intent, env, {
     name: 'tithi',
-    askCityPrompt: `Which city are you in? I need it to make sure the date is right for your timezone 🙏`,
+    askCityPrompt: `Which city are you in? I need it to make sure the date is right for your timezone 🙏🏾`,
     answer: answerTithi,
     fallbackToSaved: true, // if city saved, use it without re-asking
   });

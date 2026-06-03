@@ -19,7 +19,8 @@
       "Bash(ls /usr/local/bin/n* /opt/homebrew/bin/n* 2>/dev/null | grep -E \"node|npm\" ; ls ~/.nvm/versions/node/*/bin/node 2>/dev/null | tail -3)",
       "Bash(find /usr /opt/homebrew ~/.nvm ~/.volta -name \"node\" -type f 2>/dev/null | head -5)",
       "Bash(zsh -l -c \"which node && node --version && cd \\\\\"/Users/parth/Desktop/Samta Agent/Code\\\\\" && npm test 2>&1\")",
-      "Bash(npx wrangler *)"
+      "Bash(npx wrangler *)",
+      "Bash(npx vitest *)"
     ]
   }
 }

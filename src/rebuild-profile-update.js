@@ -32,7 +32,7 @@ export async function handleProfileUpdate(phone, text, user, intent, env) {
     const strictness = parseStrictnessInput(text);
     if (strictness) {
       await updateUser(phone, { strictness, pending_action: null }, env);
-      await sendMessage(phone, `Got it 🙏 set you to ${strictness}. Ask me anything!`, env);
+      await sendMessage(phone, `Got it 🙏🏾 set you to ${strictness}. Ask me anything!`, env);
       return true;
     }
     return false;
@@ -42,7 +42,7 @@ export async function handleProfileUpdate(phone, text, user, intent, env) {
   const strictness = intent.params.strictness_level;
   if (strictness) {
     await updateUser(phone, { strictness, pending_action: null }, env);
-    await sendMessage(phone, `Got it 🙏 set you to ${strictness}. Ask me anything!`, env);
+    await sendMessage(phone, `Got it 🙏🏾 set you to ${strictness}. Ask me anything!`, env);
     return true;
   }
 
@@ -51,7 +51,7 @@ export async function handleProfileUpdate(phone, text, user, intent, env) {
   if (community) {
     await updateUser(phone, { community, pending_action: null }, env);
     const label = community === 'baps' ? 'BAPS' : 'Jain';
-    await sendMessage(phone, `Got it 🙏 set your community to ${label}. Ask me anything!`, env);
+    await sendMessage(phone, `Got it 🙏🏾 set your community to ${label}. Ask me anything!`, env);
     return true;
   }
 

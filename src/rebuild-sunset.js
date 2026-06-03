@@ -24,7 +24,7 @@ export function rebuildSunsetClaims(user, intent, text) {
 async function answerSunset(phone, user, place, intent, env) {
   const sunInfo = await getSunForPlace(place, intent.params?.sun_date || null);
   if (!sunInfo) {
-    await sendMessage(phone, `Sorry — I couldn't look up that city right now. Please try again in a moment 🙏`, env);
+    await sendMessage(phone, `Sorry — I couldn't look up that city right now. Please try again in a moment 🙏🏾`, env);
     return;
   }
   const sunData = formatSunDataForClaude(sunInfo);
@@ -48,7 +48,7 @@ async function answerSunset(phone, user, place, intent, env) {
 export async function handleRebuildSunset(phone, text, user, intent, env) {
   return handleCityJourney(phone, text, user, intent, env, {
     name: 'sunset',
-    askCityPrompt: `Which city should I check sunset for? 🙏`,
+    askCityPrompt: `Which city should I check sunset for? 🙏🏾`,
     answer: answerSunset,
   });
 }

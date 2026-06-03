@@ -6,7 +6,7 @@
 export const DEFAULT_DIET = 'jain';
 
 export function getWelcomeMessage() {
-  return `Hello 🙏 I'm Samta — your friend for daily dietary and fasting questions.
+  return `Hello 🙏🏾 I'm Samta — your friend for daily dietary and fasting questions.
 
 
 You can ask me things like:
@@ -18,7 +18,7 @@ You can ask me things like:
 - What can I substitute for onion?
 - Are the ingredients in this food or supplement safe?
 
-Or send a photo of any food label, menu, or product to scan 🙏`;
+Or send a photo of any food label, menu, or product to scan 🙏🏾`;
 }
 
 export function getStrictnessQuestion() {

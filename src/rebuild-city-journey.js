@@ -136,8 +136,8 @@ export async function handleCityJourney(phone, text, user, intent, env, journey)
       // Still couldn't resolve — ask again
       const max = pending.choices.length;
       const msg = n
-        ? `That number wasn't in the list. Reply with 1–${max}, or type the full city name 🙏`
-        : `I couldn't find that city. Reply with 1–${max}, or type the full city name with state or country 🙏`;
+        ? `That number wasn't in the list. Reply with 1–${max}, or type the full city name 🙏🏾`
+        : `I couldn't find that city. Reply with 1–${max}, or type the full city name with state or country 🙏🏾`;
       await sendMessage(phone, msg, env);
       return true; // keep pending so they can retry
     }
@@ -157,11 +157,11 @@ export async function handleCityJourney(phone, text, user, intent, env, journey)
       return true;
     }
     if (res.status === 'error') {
-      await sendMessage(phone, `Sorry — I couldn't look that up right now. Please try again in a moment 🙏`, env);
+      await sendMessage(phone, `Sorry — I couldn't look that up right now. Please try again in a moment 🙏🏾`, env);
       return true; // keep pending; retry
     }
     // missing
-    await sendMessage(phone, `I couldn't find that city. Please type the full city name with state or country 🙏`, env);
+    await sendMessage(phone, `I couldn't find that city. Please type the full city name with state or country 🙏🏾`, env);
     return true;
   }
 

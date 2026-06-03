@@ -124,7 +124,7 @@ export default {
       if (throttled) {
         const existing = await getUser(phone, env);
         if (!existing) {
-          await sendMessage(phone, `We're experiencing high demand right now 🙏 Please try again tomorrow.`, env);
+          await sendMessage(phone, `We're experiencing high demand right now 🙏🏾 Please try again tomorrow.`, env);
           return new Response('OK', { status: 200 });
         }
       }
@@ -134,7 +134,7 @@ export default {
       const rlKey = `ratelimit:${phone}:${today}`;
       const count = parseInt(await env.KV.get(rlKey) || '0', 10);
       if (count >= 40000) {
-        await sendMessage(phone, `You've hit today's limit 🙏 Back tomorrow.`, env);
+        await sendMessage(phone, `You've hit today's limit 🙏🏾 Back tomorrow.`, env);
         return new Response('OK', { status: 200 });
       }
       await env.KV.put(rlKey, String(count + 1), { expirationTtl: 86400 });
@@ -146,11 +146,11 @@ export default {
       const spend = parseFloat(await env.KV.get(`spend:${spendDay}`) || '0');
       if (spend >= 8) {
         if (messageType === 'image') {
-          await sendMessage(phone, `We're at capacity for image scans today 🙏 Text questions still work.`, env);
+          await sendMessage(phone, `We're at capacity for image scans today 🙏🏾 Text questions still work.`, env);
           return new Response('OK', { status: 200 });
         }
         if (spend >= 10) {
-          await sendMessage(phone, `We're at capacity today 🙏 Please try again tomorrow.`, env);
+          await sendMessage(phone, `We're at capacity today 🙏🏾 Please try again tomorrow.`, env);
           return new Response('OK', { status: 200 });
         }
       }
@@ -233,9 +233,9 @@ export default {
         await updateUser(phone, { pending_action: null }, env);
         if (text.trim().toUpperCase() === 'YES') {
           await deleteUser(phone, env);
-          await sendImage(phone, VIN_GOODBYE_URL, "You've been removed from the family. Take care. 🙏", env);
+          await sendImage(phone, VIN_GOODBYE_URL, "You've been removed from the family. Take care. 🙏🏾", env);
         } else {
-          await sendImage(phone, VIN_STAY_URL, "Deletion cancelled — you're still family. 🙏", env);
+          await sendImage(phone, VIN_STAY_URL, "Deletion cancelled — you're still family. 🙏🏾", env);
         }
         return new Response('OK', { status: 200 });
       }
@@ -304,7 +304,7 @@ export default {
         if (pending?.need === 'food_followup') {
           if (isShortAffirmative(25)) {
             await updateUser(phone, { pending_action: null }, env);
-            await sendMessage(phone, `What would you like to know? 🙏`, env);
+            await sendMessage(phone, `What would you like to know? 🙏🏾`, env);
             return new Response('OK', { status: 200 });
           }
           await updateUser(phone, { pending_action: null }, env);
@@ -315,7 +315,7 @@ export default {
         if (pending?.need === 'tithi_food_followup') {
           if (isShortAffirmative(25)) {
             await updateUser(phone, { pending_action: null }, env);
-            await sendMessage(phone, `Sure! Are you asking about *pachkhan* for a specific day, or want to know *what you can eat* on one of those tithis? 🙏`, env);
+            await sendMessage(phone, `Sure! Are you asking about *pachkhan* for a specific day, or want to know *what you can eat* on one of those tithis? 🙏🏾`, env);
             return new Response('OK', { status: 200 });
           }
           await updateUser(phone, { pending_action: null }, env);
@@ -460,7 +460,7 @@ export default {
           const msg = env.DEBUG === 'true'
             ? `⚠️ Error: ${err.message}
 ${(err.stack || '').slice(0, 500)}`
-            : 'Something went wrong on my end — please try again in a moment 🙏';
+            : 'Something went wrong on my end — please try again in a moment 🙏🏾';
           await sendMessage(debugPhone, msg, env);
         }
       } catch {}

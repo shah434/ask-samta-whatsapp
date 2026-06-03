@@ -43,7 +43,7 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
     : '';
 
   const m = calendarData.match(/TODAY_IS_TITHI:\s*true[\s\S]*?TODAY_TITHI_NAME:\s*(.+)/i);
-  const tithiFact = m ? `Today is ${m[1].trim()} 🙏\n\n` : '';
+  const tithiFact = m ? `Today is ${m[1].trim()} 🙏🏾\n\n` : '';
 
   // -- Build Claude messages --------------------------------------------------
   let claudeMessages = [];
@@ -78,7 +78,7 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
 
         if (!snippets) {
           await sendMessage(phone,
-            `I couldn't find ingredient info for ${productName || 'this product'} online. Can you send a photo of the back label or ingredients panel? 🙏`,
+            `I couldn't find ingredient info for ${productName || 'this product'} online. Can you send a photo of the back label or ingredients panel? 🙏🏾`,
             env);
           return true;
         }
@@ -131,7 +131,7 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
   if (!calendarHadToday && TITHI_CLAIM_PATTERNS.some(p => p.test(cleanResponse))) {
     const sentences = cleanResponse.split(/(?<=[.!?])\s+/);
     cleanResponse = sentences.filter(s => !TITHI_CLAIM_PATTERNS.some(p => p.test(s))).join(' ').trim()
-      || "Let me know what you'd like to check 🙏";
+      || "Let me know what you'd like to check 🙏🏾";
   }
 
   // -- Strictness ask --------------------------------------------------------
@@ -166,7 +166,7 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
   }
 
   // -- Send ------------------------------------------------------------------
-  if (!cleanResponse) cleanResponse = "Let me know what you'd like to check 🙏";
+  if (!cleanResponse) cleanResponse = "Let me know what you'd like to check 🙏🏾";
   await sendMessage(phone, tithiFact + cleanResponse, env);
 
   // -- Food follow-up pending ------------------------------------------------

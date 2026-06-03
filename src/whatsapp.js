@@ -40,7 +40,7 @@ export async function sendReaction(to, messageId, env) {
         type: 'reaction',
         reaction: {
           message_id: messageId,
-          emoji: '🙏'
+          emoji: '🙏🏾'
         }
       })
     }

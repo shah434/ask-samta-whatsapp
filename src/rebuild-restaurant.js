@@ -34,11 +34,11 @@ async function answerRestaurant(phone, user, place, intent, env) {
   if (isTemple) {
     const results = await searchTemples(user.community, loc, env);
     if (!results.length) {
-      await sendMessage(phone, `I couldn't find any temples in ${loc} right now. Try searching "Jain center ${loc}" on Google Maps, or check jainworld.com 🙏`, env);
+      await sendMessage(phone, `I couldn't find any temples in ${loc} right now. Try searching "Jain center ${loc}" on Google Maps, or check jainworld.com 🙏🏾`, env);
       return;
     }
     const label = user.community === 'baps' ? 'BAPS mandirs' : 'Jain temples';
-    await sendMessage(phone, `Here are some ${label} near ${loc}:\n\n${formatPlaces(results)}\n\nCall ahead to confirm timings 🙏`, env);
+    await sendMessage(phone, `Here are some ${label} near ${loc}:\n\n${formatPlaces(results)}\n\nCall ahead to confirm timings 🙏🏾`, env);
     return;
   }
 
@@ -63,7 +63,7 @@ async function answerRestaurant(phone, user, place, intent, env) {
   }).slice(0, 5);
 
   if (!results.length) {
-    await sendMessage(phone, `I couldn't find vegetarian-friendly spots in ${loc} right now. Try a nearby larger city 🙏`, env);
+    await sendMessage(phone, `I couldn't find vegetarian-friendly spots in ${loc} right now. Try a nearby larger city 🙏🏾`, env);
     return;
   }
 
@@ -75,8 +75,8 @@ export async function handleRebuildRestaurant(phone, text, user, intent, env) {
   return handleCityJourney(phone, text, user, intent, env, {
     name: 'restaurant',
     askCityPrompt: isTemple
-      ? `Which city should I search for temples in? 🙏`
-      : `Which city should I find restaurants in? 🙏`,
+      ? `Which city should I search for temples in? 🙏🏾`
+      : `Which city should I find restaurants in? 🙏🏾`,
     answer: answerRestaurant,
   });
 }

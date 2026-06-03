@@ -20,13 +20,13 @@ export function cityUpdateClaims(user, intent, text) {
 // Called by handleCityJourney after saveCity() has already written to DB + KV
 // and updated user.city to the display string (e.g. "Brooklyn, New York, US").
 async function answerCityUpdate(phone, user, place, intent, env) {
-  await sendMessage(phone, `Got it — saved your city as ${user.city} 🙏`, env);
+  await sendMessage(phone, `Got it — saved your city as ${user.city} 🙏🏾`, env);
 }
 
 export async function handleCityUpdate(phone, text, user, intent, env) {
   return handleCityJourney(phone, text, user, intent, env, {
     name: 'city_update',
-    askCityPrompt: `Which city are you in? 🙏`,
+    askCityPrompt: `Which city are you in? 🙏🏾`,
     answer: answerCityUpdate,
     fallbackToSaved: false, // if city_raw fails to resolve, ask — don't confirm the old city
   });
