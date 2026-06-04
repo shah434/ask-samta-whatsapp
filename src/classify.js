@@ -263,6 +263,9 @@ export function classify(message, hasImage = false) {
     const city = extractCityRaw(text);
     if (city) intent.params.city_raw = city;
     if (isTemple) intent.params.place_type = 'temple';
+    // Extract cuisine so "find Indian restaurants" searches Indian, not just Jain friendly.
+    const cuisineMatch = lower.match(/\b(indian|chinese|thai|italian|mexican|korean|japanese|gujarati|punjabi|south indian|north indian|mediterranean|middle eastern|ethiopian|greek|turkish|persian|lebanese|vietnamese|sushi|pizza|vegan|vegetarian|pure veg)\b/);
+    if (cuisineMatch) intent.params.cuisine = cuisineMatch[1];
     intent.prompt_blocks = ['restaurant'];
     return intent;
   }

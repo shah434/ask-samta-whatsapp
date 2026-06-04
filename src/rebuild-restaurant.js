@@ -42,25 +42,28 @@ async function answerRestaurant(phone, user, place, intent, env) {
     return;
   }
 
-  const communityQuery = user.community === 'baps'
-    ? 'BAPS Swaminarayan friendly'
-    : 'Jain friendly';
+  const cuisine = intent.params?.cuisine || null;
+  const communityTag = user.community === 'baps' ? 'BAPS Swaminarayan friendly' : 'Jain friendly';
 
-  // Run community-specific and Indian vegetarian searches in parallel —
-  // Indian vegetarian restaurants often cater well to Jain/BAPS diets.
-  const [communityResults, indianResults] = await Promise.all([
-    searchRestaurants(communityQuery, loc, env),
-    searchRestaurants('Indian pure vegetarian', loc, env),
-  ]);
-
-  // Merge, deduplicate by display name, cap at 5.
-  const seen = new Set();
-  const results = [...communityResults, ...indianResults].filter(p => {
-    const key = (p.displayName?.text || '').toLowerCase();
-    if (!key || seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  }).slice(0, 5);
+  let results;
+  if (cuisine) {
+    // Specific cuisine requested — dual search because e.g. "Italian Jain friendly"
+    // has few hits; the vegetarian query fills the gaps.
+    const [r1, r2] = await Promise.all([
+      searchRestaurants(`${cuisine} ${communityTag}`, loc, env),
+      searchRestaurants(`${cuisine} vegetarian`, loc, env),
+    ]);
+    const seen = new Set();
+    results = [...r1, ...r2].filter(p => {
+      const key = (p.displayName?.text || '').toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(0, 5);
+  } else {
+    // No cuisine — single community search is enough.
+    results = await searchRestaurants(communityTag, loc, env);
+  }
 
   if (!results.length) {
     await sendMessage(phone, `I couldn't find vegetarian-friendly spots in ${loc} right now. Try a nearby larger city 🙏🏾`, env);
