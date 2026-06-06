@@ -123,15 +123,31 @@ export async function handleCityJourney(phone, text, user, intent, env, journey)
         // doesn't re-geocode into another ambiguous list when the answer is
         // already in the list in front of them.
         const norm = reply.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ');
-        const fuzzyMatch = pending.choices.find(c => {
+
+        // Match 1: reply contains both city name + state/country
+        // e.g. "Columbus Ohio USA" → Columbus, Ohio, United States
+        const fullMatch = pending.choices.find(c => {
           const name = (c.name || '').toLowerCase();
           const admin = (c.admin1 || '').toLowerCase();
           const country = (c.country || '').toLowerCase();
           return norm.includes(name) && (admin === '' || norm.includes(admin) || norm.includes(country));
         });
-        if (fuzzyMatch) {
-          await saveCity(phone, user, fuzzyMatch, env);
-          await journey.answer(phone, user, fuzzyMatch, pending.intent, env);
+        if (fullMatch) {
+          await saveCity(phone, user, fullMatch, env);
+          await journey.answer(phone, user, fullMatch, pending.intent, env);
+          return true;
+        }
+
+        // Match 2: reply is just the state/region to disambiguate
+        // e.g. user replied "Ohio" to a Columbus picker → picks Columbus, Ohio
+        // Only fires when exactly one choice has that admin1 (unambiguous).
+        const adminMatches = pending.choices.filter(c => {
+          const admin = (c.admin1 || '').toLowerCase();
+          return admin && norm.trim() === admin;
+        });
+        if (adminMatches.length === 1) {
+          await saveCity(phone, user, adminMatches[0], env);
+          await journey.answer(phone, user, adminMatches[0], pending.intent, env);
           return true;
         }
 
