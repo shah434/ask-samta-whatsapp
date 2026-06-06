@@ -338,7 +338,7 @@ export default {
         }
 
         // -- Tithi followup: user said "yes" after sunset offered a fast check --
-        if (pending?.need === 'tithi_followup' && isShortAffirmative(20)) {
+        if (pending?.need === 'tithi_followup' && (isShortAffirmative(20) || trimmed === '1')) {
           await updateUser(phone, { pending_action: null }, env);
           user.pending_action = null;
           const tithiIntent = {

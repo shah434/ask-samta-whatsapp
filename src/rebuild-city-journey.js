@@ -52,9 +52,13 @@ export function cityJourneyClaims(user, intent, journeyName, text) {
   // candidates for resuming a pending city flow.
   if (intent.journey !== 'food') return false;
 
-  // Claim ONLY if this journey is pending AND the message is a bare reply.
+  // Claim ONLY if this journey is pending on a city-resolution need AND the
+  // message is a bare reply. Followup needs (tithi_followup, food_followup,
+  // etc.) are NOT city flows — don't let bare numbers get misrouted to the
+  // city resolver (e.g. "1" after "Want me to check tithi?" → geocodes "1").
+  const CITY_NEEDS = new Set(['city', 'city_pick']);
   const pending = readPending(user.pending_action);
-  if (!pending || pending.intent.journey !== journeyName) return false;
+  if (!pending || pending.intent.journey !== journeyName || !CITY_NEEDS.has(pending.need)) return false;
   return isBareReply(text);
 }
 
