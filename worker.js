@@ -15,7 +15,6 @@ import { getUser, createUser, updateUser, deleteUser, fetchPendingAction } from 
 import { routeFallback } from './src/route-fallback.js';
 import { sendMessage, sendReaction, sendImage, getImageAsBase64 } from './src/whatsapp.js';
 import { handleRebuildFood } from './src/rebuild-food.js';
-import { reverseGeocode } from './src/reverseGeocode.js';
 import { DEFAULT_DIET, getWelcomeMessage } from './src/onboarding.js';
 import { getCalendarCached, getTodayAndUpcomingEvents } from './src/calendar.js';
 // ────────────────────────────────────────────────────────────────────────────
