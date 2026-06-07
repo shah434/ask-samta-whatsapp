@@ -42,14 +42,11 @@ async function answerRestaurant(phone, user, place, intent, env) {
   const coords = { lat: place.latitude, lng: place.longitude };
   const loc = [place.name, place.admin1, place.country].filter(Boolean).join(', ') || user.city;
 
-  // Show the location-sharing invite only when we silently used the saved city
-  // (no pin shared, no city typed, and not already a pin-refined result).
-  // _pin_refine flag is set on the stored intent when the invite fires so
-  // the second pass — after the user shares their pin — never shows it again.
-  const usedSavedCity = !intent.params?.locationPin
-    && !intent.params?.city_raw
-    && !intent.params?._pin_refine;
-  const locationOffer = usedSavedCity ? LOCATION_SHARE_FOR_RESULTS : '';
+  // Show the location-sharing invite whenever the location came from text
+  // (typed city or saved city) rather than a GPS pin. Skip it when a pin
+  // was already used this turn, or on the pin-refined follow-up pass.
+  const locationCameFromText = !intent.params?.locationPin && !intent.params?._pin_refine;
+  const locationOffer = locationCameFromText ? LOCATION_SHARE_FOR_RESULTS : '';
 
   if (isTemple) {
     const results = await searchTemples(user.community, loc, env, coords);
