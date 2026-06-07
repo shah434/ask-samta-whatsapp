@@ -504,23 +504,29 @@ export default {
 
         if (rbIntent.params.fast_term) {
           const ft = rbIntent.params.fast_term;
-          if (ft === 'pachkhan_general') {
-            const rec = serializePending({ need: 'fast_pick', intent: rbIntent });
-            await updateUser(phone, { pending_action: rec }, env);
-            await sendMessage(phone, FAST_MENU, env);
-            return new Response('OK', { status: 200 });
-          }
-          // Bare "upvas" (no chovihar/tivihar specified) → ask sub-type
-          if (ft === 'upvas') {
-            const rec = serializePending({ need: 'upvas_pick', intent: rbIntent });
-            await updateUser(phone, { pending_action: rec }, env);
-            await sendMessage(phone, UPVAS_MENU, env);
-            return new Response('OK', { status: 200 });
-          }
-          const rules = rulesFor(ft);
-          if (rules) {
-            await sendMessage(phone, rules, env);
-            return new Response('OK', { status: 200 });
+          // If a specific food was named ("can I have potatoes during ekasan?"),
+          // the user wants a Claude verdict — skip all code-driven rule shortcuts
+          // and fall through to handleRebuildFood.
+          const wantsVerdict = !!rbIntent.params.food_text;
+          if (!wantsVerdict) {
+            if (ft === 'pachkhan_general') {
+              const rec = serializePending({ need: 'fast_pick', intent: rbIntent });
+              await updateUser(phone, { pending_action: rec }, env);
+              await sendMessage(phone, FAST_MENU, env);
+              return new Response('OK', { status: 200 });
+            }
+            // Bare "upvas" with no specific food → ask sub-type
+            if (ft === 'upvas') {
+              const rec = serializePending({ need: 'upvas_pick', intent: rbIntent });
+              await updateUser(phone, { pending_action: rec }, env);
+              await sendMessage(phone, UPVAS_MENU, env);
+              return new Response('OK', { status: 200 });
+            }
+            const rules = rulesFor(ft);
+            if (rules) {
+              await sendMessage(phone, rules, env);
+              return new Response('OK', { status: 200 });
+            }
           }
         }
 
