@@ -16,6 +16,7 @@ import { callClaude } from './claude.js';
 import { buildSystemPrompt, buildHistoryMessages, buildHistoryUpdate } from './utils.js';
 import { serializePending } from './pending.js';
 import { updateUser } from './database.js';
+import { LOCATION_SHARE_INVITE } from './prompts.js';
 
 export function rebuildSunsetClaims(user, intent, text) {
   return cityJourneyClaims(user, intent, 'sunset', text);
@@ -49,7 +50,7 @@ async function answerSunset(phone, user, place, intent, env) {
 export async function handleRebuildSunset(phone, text, user, intent, env) {
   return handleCityJourney(phone, text, user, intent, env, {
     name: 'sunset',
-    askCityPrompt: `Which city should I check sunset for? 🙏🏾`,
+    askCityPrompt: `Which city should I check sunset for? 🙏🏾${LOCATION_SHARE_INVITE}`,
     answer: answerSunset,
   });
 }

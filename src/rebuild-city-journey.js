@@ -19,6 +19,7 @@
 // ============================================
 
 import { resolveLocation, formatCandidatePicker } from './resolveLocation.js';
+import { reverseGeocode } from './reverseGeocode.js';
 import { serializePending, readPending } from './pending.js';
 import { sendMessage } from './whatsapp.js';
 import { updateUser } from './database.js';
@@ -106,6 +107,39 @@ function placeFromSaved(user) {
 // Returns true if it handled the turn (caller must then return).
 export async function handleCityJourney(phone, text, user, intent, env, journey) {
   const pending = readPending(user.pending_action);
+
+  // ---- Location pin fast-path (before isBareReply — empty text would fail it) ----
+  if (intent.params?.locationPin) {
+    const { lat, lng } = intent.params.locationPin;
+    const place = await reverseGeocode(lat, lng);
+    if (!place) {
+      await sendMessage(phone, `I had trouble reading your location — please type your city name 🙏🏾`, env);
+      return true; // keep pending so user can retry with text
+    }
+    const isCityResume = pending
+      && pending.intent.journey === journey.name
+      && (pending.need === 'city' || pending.need === 'city_pick');
+    if (isCityResume) {
+      await saveCity(phone, user, place, env);
+      await journey.answer(phone, user, place, pending.intent, env);
+    } else {
+      // Cold pin or non-city pending: save location but preserve pending_action
+      // so any in-flight question (strictness, fast_pick, etc.) isn't lost.
+      const display = `${place.name}${place.admin1 ? ', ' + place.admin1 : ''}${place.country ? ', ' + place.country : ''}`;
+      await updateUser(phone, {
+        city: display,
+        timezone: place.timezone,
+        latitude: place.latitude,
+        longitude: place.longitude,
+      }, env);
+      user.city = display;
+      user.timezone = place.timezone;
+      user.latitude = place.latitude;
+      user.longitude = place.longitude;
+      await sendMessage(phone, `Got it — updated your location to ${display} 🙏🏾`, env);
+    }
+    return true;
+  }
 
   // ---- RESUME: we previously asked this user for a city ----------------------
   if (pending && pending.intent.journey === journey.name && isBareReply(text)) {

@@ -7,6 +7,7 @@
 import { cityJourneyClaims, handleCityJourney } from './rebuild-city-journey.js';
 import { searchRestaurants, searchTemples } from './location.js';
 import { sendMessage } from './whatsapp.js';
+import { LOCATION_SHARE_FOR_RESULTS } from './prompts.js';
 
 export function rebuildRestaurantClaims(user, intent, text) {
   return cityJourneyClaims(user, intent, 'restaurant', text);
@@ -30,15 +31,17 @@ function formatPlaces(results) {
 async function answerRestaurant(phone, user, place, intent, env) {
   const isTemple = intent.params?.place_type === 'temple';
   const loc = user.city || [place.name, place.admin1, place.country].filter(Boolean).join(', ');
+  const coords = user.latitude != null ? { lat: user.latitude, lng: user.longitude } : null;
+  const locationOffer = coords ? '' : LOCATION_SHARE_FOR_RESULTS;
 
   if (isTemple) {
-    const results = await searchTemples(user.community, loc, env);
+    const results = await searchTemples(user.community, loc, env, coords);
     if (!results.length) {
-      await sendMessage(phone, `I couldn't find any temples in ${loc} right now. Try searching "Jain center ${loc}" on Google Maps, or check jainworld.com 🙏🏾`, env);
+      await sendMessage(phone, `I couldn't find any temples in ${loc} right now. Try searching "Jain center ${loc}" on Google Maps, or check jainworld.com 🙏🏾${locationOffer}`, env);
       return;
     }
     const label = user.community === 'baps' ? 'BAPS mandirs' : 'Jain temples';
-    await sendMessage(phone, `Here are some ${label} near ${loc}:\n\n${formatPlaces(results)}\n\nCall ahead to confirm timings 🙏🏾`, env);
+    await sendMessage(phone, `Here are some ${label} near ${loc}:\n\n${formatPlaces(results)}\n\nCall ahead to confirm timings 🙏🏾${locationOffer}`, env);
     return;
   }
 
@@ -50,8 +53,8 @@ async function answerRestaurant(phone, user, place, intent, env) {
     // Specific cuisine requested — dual search because e.g. "Italian Jain friendly"
     // has few hits; the vegetarian query fills the gaps.
     const [r1, r2] = await Promise.all([
-      searchRestaurants(`${cuisine} ${communityTag}`, loc, env),
-      searchRestaurants(`${cuisine} vegetarian`, loc, env),
+      searchRestaurants(`${cuisine} ${communityTag}`, loc, env, coords),
+      searchRestaurants(`${cuisine} vegetarian`, loc, env, coords),
     ]);
     const seen = new Set();
     results = [...r1, ...r2].filter(p => {
@@ -62,15 +65,15 @@ async function answerRestaurant(phone, user, place, intent, env) {
     }).slice(0, 5);
   } else {
     // No cuisine — single community search is enough.
-    results = await searchRestaurants(communityTag, loc, env);
+    results = await searchRestaurants(communityTag, loc, env, coords);
   }
 
   if (!results.length) {
-    await sendMessage(phone, `I couldn't find vegetarian-friendly spots in ${loc} right now. Try a nearby larger city 🙏🏾`, env);
+    await sendMessage(phone, `I couldn't find vegetarian-friendly spots in ${loc} right now. Try a nearby larger city 🙏🏾${locationOffer}`, env);
     return;
   }
 
-  await sendMessage(phone, formatPlaces(results), env);
+  await sendMessage(phone, `${formatPlaces(results)}${locationOffer}`, env);
 }
 
 export async function handleRebuildRestaurant(phone, text, user, intent, env) {
@@ -78,8 +81,8 @@ export async function handleRebuildRestaurant(phone, text, user, intent, env) {
   return handleCityJourney(phone, text, user, intent, env, {
     name: 'restaurant',
     askCityPrompt: isTemple
-      ? `Which city should I search for temples in? 🙏🏾`
-      : `Which city should I find restaurants in? 🙏🏾`,
+      ? `Which city should I search for temples in? 🙏🏾${LOCATION_SHARE_FOR_RESULTS}`
+      : `Which city should I find restaurants in? 🙏🏾${LOCATION_SHARE_FOR_RESULTS}`,
     answer: answerRestaurant,
   });
 }

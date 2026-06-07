@@ -15,6 +15,7 @@ import { getUser, createUser, updateUser, deleteUser, fetchPendingAction } from 
 import { routeFallback } from './src/route-fallback.js';
 import { sendMessage, sendReaction, sendImage, getImageAsBase64 } from './src/whatsapp.js';
 import { handleRebuildFood } from './src/rebuild-food.js';
+import { reverseGeocode } from './src/reverseGeocode.js';
 import { DEFAULT_DIET, getWelcomeMessage } from './src/onboarding.js';
 import { getCalendarCached, getTodayAndUpcomingEvents } from './src/calendar.js';
 // ────────────────────────────────────────────────────────────────────────────
@@ -108,7 +109,7 @@ export default {
         return new Response('OK', { status: 200 });
       }
 
-      if (!['text', 'image'].includes(messageType)) {
+      if (!['text', 'image', 'location'].includes(messageType)) {
         await sendMessage(
           phone,
           'I can only read text messages and food label photos. Please send a text question or a photo of a label.',
@@ -169,8 +170,12 @@ export default {
       // Fresh journeys (sunset, restaurant, tithi, etc.) always win over any
       // pending — no need to pay for a Supabase read to confirm it. Only
       // food-classified messages (potential bare replies) need fresh pending.
-      const rbIntent = classify(text, messageType === 'image');
-      const needsFreshPending = rbIntent.journey === 'food';
+      // Location pins always need fresh pending (may be resuming a city ask).
+      const isLocationMessage = messageType === 'location';
+      const rbIntent = isLocationMessage
+        ? { journey: 'city_update', params: {}, prompt_blocks: [] }
+        : classify(text, messageType === 'image');
+      const needsFreshPending = isLocationMessage || rbIntent.journey === 'food';
 
       // -- Phase 1: Parallel I/O ---------------------------------------------
       const imagePromise = messageType === 'image'
@@ -279,6 +284,40 @@ export default {
       // -- Bare greeting → show welcome --------------------------------------
       if (messageType === 'text' && isBareGreeting(text)) {
         await sendMessage(phone, getWelcomeMessage(), env);
+        return new Response('OK', { status: 200 });
+      }
+
+      // -- Location pin ----------------------------------------------------------
+      // Routed before text dispatch. Picks up any in-flight city ask (pending)
+      // and resumes it; cold pins save location as a city_update.
+      if (isLocationMessage) {
+        const lat = message.location?.latitude;
+        const lng = message.location?.longitude;
+        if (lat != null && lng != null) {
+          const locPending = readPending(user.pending_action);
+          const pendingJourney = locPending?.intent?.journey;
+          const isCityPending = locPending && (locPending.need === 'city' || locPending.need === 'city_pick');
+          const CITY_JOURNEY_NAMES = new Set(['sunset', 'restaurant', 'city_update', 'tithi']);
+          const journeyName = (isCityPending && CITY_JOURNEY_NAMES.has(pendingJourney))
+            ? pendingJourney
+            : 'city_update';
+          const locIntent = {
+            journey: journeyName,
+            params: { locationPin: { lat, lng }, original_text: 'Shared location' },
+            prompt_blocks: journeyName === 'restaurant' ? ['restaurant']
+              : (journeyName === 'sunset' || journeyName === 'tithi') ? ['calendar']
+              : [],
+          };
+          if (journeyName === 'sunset') {
+            await handleRebuildSunset(phone, '', user, locIntent, env);
+          } else if (journeyName === 'restaurant') {
+            await handleRebuildRestaurant(phone, '', user, locIntent, env);
+          } else if (journeyName === 'tithi') {
+            await handleRebuildTithi(phone, '', user, locIntent, env);
+          } else {
+            await handleCityUpdate(phone, '', user, locIntent, env);
+          }
+        }
         return new Response('OK', { status: 200 });
       }
 

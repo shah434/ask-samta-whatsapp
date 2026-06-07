@@ -5,13 +5,25 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-npm test                           # run all vitest tests (pure-logic only)
-npx vitest run tests/foo.test.js   # run a single test file
-npx wrangler deploy                # deploy to Cloudflare Workers
-npx wrangler tail                  # stream live logs from production
+npm test                                  # run all vitest tests (pure-logic only)
+npx vitest run tests/foo.test.js          # run a single test file
+npx wrangler deploy                       # deploy to prod (main branch only)
+npx wrangler deploy --env staging         # deploy to greenbite-staging (feature branches)
+npx wrangler tail                         # stream live logs from production
+npx wrangler tail --env staging           # stream live logs from staging
 ```
 
 There is no local dev server — the worker runs exclusively on Cloudflare. Live behaviour is tested by deploying and messaging the WhatsApp number directly.
+
+## Branch & Staging Workflow
+
+- Feature work happens on a branch: `git checkout -b feature/my-feature`
+- Deploy to staging for live testing: `npx wrangler deploy --env staging`
+  - Staging worker URL: `greenbite-staging.<your-subdomain>.workers.dev`
+  - Staging has its own KV namespace (isolated from prod data)
+  - Staging shares the same Supabase DB — use a test phone number, not real users
+- When satisfied, open a PR → merge to `main` → `npx wrangler deploy`
+- Never deploy to prod directly from a feature branch
 
 ## Architecture
 

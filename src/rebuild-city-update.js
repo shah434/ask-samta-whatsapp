@@ -12,6 +12,7 @@
 
 import { cityJourneyClaims, handleCityJourney } from './rebuild-city-journey.js';
 import { sendMessage } from './whatsapp.js';
+import { LOCATION_SHARE_INVITE } from './prompts.js';
 
 export function cityUpdateClaims(user, intent, text) {
   return cityJourneyClaims(user, intent, 'city_update', text);
@@ -26,7 +27,7 @@ async function answerCityUpdate(phone, user, place, intent, env) {
 export async function handleCityUpdate(phone, text, user, intent, env) {
   return handleCityJourney(phone, text, user, intent, env, {
     name: 'city_update',
-    askCityPrompt: `Which city are you in? 🙏🏾`,
+    askCityPrompt: `Which city are you in? 🙏🏾${LOCATION_SHARE_INVITE}`,
     answer: answerCityUpdate,
     fallbackToSaved: false, // if city_raw fails to resolve, ask — don't confirm the old city
   });

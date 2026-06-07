@@ -787,3 +787,12 @@ After giving the time, add one short line:
 For Jain users only, also add on a new line after the city line:
 "Want me to check if today is a fast day?"
 `;
+
+// Appended to every "which city?" prompt (sunset, tithi, restaurant, city_update).
+// Tells users they can share a WhatsApp location pin instead of typing.
+export const LOCATION_SHARE_INVITE =
+  `\n\nOr share your exact location 📍\nTap the *+* or 📎 icon in WhatsApp → *Location* → *Share Current Location*`;
+
+// Appended to restaurant/temple responses when no city is saved yet.
+export const LOCATION_SHARE_FOR_RESULTS =
+  `\n\nFor results near your exact spot, share your location 📍\nTap *+* or 📎 → *Location* → *Share Current Location*`;

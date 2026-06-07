@@ -9,6 +9,7 @@ import { sendMessage } from './whatsapp.js';
 import { buildSystemPrompt, buildHistoryMessages, buildHistoryUpdate } from './utils.js';
 import { serializePending } from './pending.js';
 import { updateUser } from './database.js';
+import { LOCATION_SHARE_INVITE } from './prompts.js';
 
 const TITHI_CLAIM_PATTERNS = [
   /\btoday\s+is\s+(a\s+)?(?:beej|bij|chaturdashi|chaumasi|paryushan(?:a)?|ekadashi|atthai|attham|chhath|punam|ashtami|nom|amavasya|purnima|fast day|tithi)\b/i,
@@ -78,7 +79,7 @@ export async function handleRebuildTithi(phone, text, user, intent, env) {
 
   return handleCityJourney(phone, text, user, intent, env, {
     name: 'tithi',
-    askCityPrompt: `Which city are you in? I need it to make sure the date is right for your timezone 🙏🏾`,
+    askCityPrompt: `Which city are you in? I need it to make sure the date is right for your timezone 🙏🏾${LOCATION_SHARE_INVITE}`,
     answer: answerTithi,
     fallbackToSaved: true, // if city saved, use it without re-asking
   });

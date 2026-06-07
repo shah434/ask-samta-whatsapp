@@ -14,3 +14,10 @@ enabled = true
 
 [observability.logs]
 invocation_logs = true
+
+[env.staging]
+name = "greenbite-staging"
+
+[[env.staging.kv_namespaces]]
+binding = "KV"
+id = "b7ce005ab1b848bf99d7430dc91a7111"
