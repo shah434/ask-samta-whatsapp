@@ -148,11 +148,14 @@ export async function handleCityJourney(phone, text, user, intent, env, journey)
   }
 
   // ---- RESUME: we previously asked this user for a city ----------------------
-  // Guard: only resume on actual city-resolution needs. Other pending types
-  // (tithi_followup, food_followup, etc.) share intent.journey with city journeys
-  // but are NOT city asks — isBareReply("tithi") would otherwise geocode the word.
+  // Two guards before treating the message as a city reply:
+  // 1. intent.journey === 'food': the message was NOT classified as a recognized
+  //    topic (sunset, tithi, etc.). A bare topic word like "tithi" is a fresh
+  //    request even when a city ask is pending — don't geocode it as a city.
+  // 2. CITY_NEEDS: the pending must be an actual city-resolution need, not a
+  //    followup (tithi_followup, food_followup) that shares intent.journey.
   const CITY_NEEDS = new Set(['city', 'city_pick']);
-  if (pending && pending.intent.journey === journey.name && CITY_NEEDS.has(pending.need) && isBareReply(text)) {
+  if (intent.journey === 'food' && pending && pending.intent.journey === journey.name && CITY_NEEDS.has(pending.need) && isBareReply(text)) {
     const reply = (text || '').trim();
 
     // Resume A: numbered pick from a city_pick list.
