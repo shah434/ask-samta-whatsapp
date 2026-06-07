@@ -51,6 +51,47 @@ export async function resolveLocation(cityRaw) {
   if (NON_CITIES.includes(raw.toLowerCase())) return { status: 'missing' };
 
   try {
+    // --- US ZIP code: resolve via Nominatim postal search + Open-Meteo TZ ---
+    if (/^\d{5}$/.test(raw)) {
+      const [nomRes, _] = await Promise.all([
+        fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&postalcode=${raw}&countrycodes=us&limit=1&addressdetails=1`,
+          { headers: { 'User-Agent': 'SamtaAgent/1.0' } }
+        ),
+        Promise.resolve(),
+      ]);
+      const nomData = nomRes.ok ? await nomRes.json() : [];
+      if (Array.isArray(nomData) && nomData.length > 0) {
+        const r = nomData[0];
+        const lat = parseFloat(r.lat);
+        const lon = parseFloat(r.lon);
+        const addr = r.address || {};
+        const name = addr.city ?? addr.town ?? addr.village ?? addr.county ?? null;
+        if (name) {
+          const tzRes = await fetch(
+            `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&timezone=auto&forecast_days=0`
+          );
+          const tzData = tzRes.ok ? await tzRes.json() : {};
+          const timezone = tzData?.timezone;
+          if (timezone) {
+            return {
+              status: 'resolved',
+              place: {
+                name,
+                admin1: addr.state ?? null,
+                country: addr.country ?? null,
+                latitude: lat,
+                longitude: lon,
+                timezone,
+              },
+            };
+          }
+        }
+      }
+      // ZIP not found or timezone lookup failed — ask for city name
+      return { status: 'missing' };
+    }
+
     // Extract a trailing state qualifier BEFORE stripping it, so we can use
     // it to narrow ambiguous geocoder results after the search.
     // Handles both 2-letter codes ("savannah, ga") and full names ("savannah, georgia").
