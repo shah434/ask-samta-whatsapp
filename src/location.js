@@ -16,9 +16,10 @@ export async function searchRestaurants(communityQuery, location, env, coords = 
     body.locationBias = {
       circle: { center: { latitude: coords.lat, longitude: coords.lng }, radius: 8000 },
     };
+    body.rankPreference = 'DISTANCE'; // sort by proximity to pin, not by Google relevance
   }
 
-  console.log(`[places] restaurant query="${textQuery}" coords=${coords ? `${coords.lat.toFixed(4)},${coords.lng.toFixed(4)}` : 'none'}`);
+  console.log(`[places] restaurant query="${textQuery}" coords=${coords ? `${coords.lat.toFixed(4)},${coords.lng.toFixed(4)}` : 'none'} rank=${coords ? 'distance' : 'relevance'}`);
 
   const res = await fetch(
     'https://places.googleapis.com/v1/places:searchText',
@@ -56,9 +57,10 @@ export async function searchTemples(community, location, env, coords = null) {
     body.locationBias = {
       circle: { center: { latitude: coords.lat, longitude: coords.lng }, radius: 15000 },
     };
+    body.rankPreference = 'DISTANCE';
   }
 
-  console.log(`[places] temple query="${textQuery}" coords=${coords ? `${coords.lat.toFixed(4)},${coords.lng.toFixed(4)}` : 'none'}`);
+  console.log(`[places] temple query="${textQuery}" coords=${coords ? `${coords.lat.toFixed(4)},${coords.lng.toFixed(4)}` : 'none'} rank=${coords ? 'distance' : 'relevance'}`);
 
   const res = await fetch(
     'https://places.googleapis.com/v1/places:searchText',
