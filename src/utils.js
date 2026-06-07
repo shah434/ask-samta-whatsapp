@@ -69,7 +69,15 @@ export function buildHistoryUpdate(user, question, answer) {
 }
 
 export function stripTags(text) {
-  return (text || '').trim();
+  return (text || '').replace(/<[^>]*>/g, '').trim();
+}
+
+// Wraps fetch with an AbortController timeout. Throws AbortError if exceeded.
+export function fetchWithTimeout(url, options, ms) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => clearTimeout(timer));
 }
 
 export function buildSystemPrompt(user, calendarData, sunData, searchSnippets = null) {

@@ -3,6 +3,8 @@
 // Fetches events from public Google Calendar
 // ============================================
 
+import { fetchWithTimeout } from './utils.js';
+
 const JAIN_CALENDAR_URL = 'https://calendar.google.com/calendar/ical/yja.org_s2t29hla94rej0pieuc8t17a34%40group.calendar.google.com/public/basic.ics';
 
 // Returns parsed events from KV cache if available, otherwise fetches live.
@@ -48,7 +50,7 @@ function todayInTimezone(tz) {
 
 export async function getTodayAndUpcomingEvents() {
   try {
-    const res = await fetch(JAIN_CALENDAR_URL);
+    const res = await fetchWithTimeout(JAIN_CALENDAR_URL, {}, 5000);
     const icsText = await res.text();
 
     const today = todayInTimezone(CALENDAR_TZ);
@@ -80,7 +82,12 @@ export async function getTodayAndUpcomingEvents() {
 
 function parseICS(icsText) {
   const events = [];
-  const lines = icsText.split('\n').map(l => l.trim());
+  // Unfold RFC 5545 line continuations (CRLF or LF followed by a space/tab)
+  // before splitting, so long SUMMARY/DTSTART values aren't truncated.
+  const unfolded = icsText
+    .replace(/\r\n[ \t]/g, '')
+    .replace(/\n[ \t]/g, '');
+  const lines = unfolded.split(/\r?\n/).map(l => l.trim());
   
   let currentEvent = null;
   

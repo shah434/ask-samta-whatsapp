@@ -2,13 +2,15 @@
 // whatsapp.js — Meta WhatsApp API functions
 // ============================================
 
+const WA_BASE = `https://graph.facebook.com/v22.0`;
+
 export async function sendMessage(to, text, env) {
   if (!text || !text.trim()) {
     console.log(`[whatsapp] refused_empty_send to=${to}`);
     return;
   }
-  await fetch(
-    `https://graph.facebook.com/v18.0/${env.PHONE_NUMBER_ID}/messages`,
+  const res = await fetch(
+    `${WA_BASE}/${env.PHONE_NUMBER_ID}/messages`,
     {
       method: 'POST',
       headers: {
@@ -23,11 +25,15 @@ export async function sendMessage(to, text, env) {
       })
     }
   );
+  if (!res.ok) {
+    const errBody = await res.text();
+    console.log(`[whatsapp] sendMessage_error status=${res.status} to=${to} body=${errBody.slice(0, 200)}`);
+  }
 }
 
 export async function sendReaction(to, messageId, env) {
-  await fetch(
-    `https://graph.facebook.com/v18.0/${env.PHONE_NUMBER_ID}/messages`,
+  const res = await fetch(
+    `${WA_BASE}/${env.PHONE_NUMBER_ID}/messages`,
     {
       method: 'POST',
       headers: {
@@ -45,11 +51,14 @@ export async function sendReaction(to, messageId, env) {
       })
     }
   );
+  if (!res.ok) {
+    console.log(`[whatsapp] sendReaction_error status=${res.status} to=${to}`);
+  }
 }
 
 export async function sendImage(to, imageUrl, caption, env) {
-  await fetch(
-    `https://graph.facebook.com/v18.0/${env.PHONE_NUMBER_ID}/messages`,
+  const res = await fetch(
+    `${WA_BASE}/${env.PHONE_NUMBER_ID}/messages`,
     {
       method: 'POST',
       headers: {
@@ -67,13 +76,20 @@ export async function sendImage(to, imageUrl, caption, env) {
       })
     }
   );
+  if (!res.ok) {
+    const errBody = await res.text();
+    console.log(`[whatsapp] sendImage_error status=${res.status} to=${to} body=${errBody.slice(0, 200)}`);
+  }
 }
 
 export async function getImageAsBase64(imageId, mimeType, env) {
   const mediaRes = await fetch(
-    `https://graph.facebook.com/v18.0/${imageId}`,
+    `${WA_BASE}/${imageId}`,
     { headers: { Authorization: `Bearer ${env.WHATSAPP_TOKEN}` } }
   );
+  if (!mediaRes.ok) {
+    throw new Error(`WhatsApp media metadata fetch failed: ${mediaRes.status}`);
+  }
   const mediaData = await mediaRes.json();
 
   const imgRes = await fetch(mediaData.url, {

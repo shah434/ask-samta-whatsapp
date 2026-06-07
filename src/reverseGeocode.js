@@ -2,15 +2,20 @@
 // Two parallel free API calls: Nominatim for city name, Open-Meteo for timezone.
 // Returns null on any failure — callers should fall back to asking for city by text.
 
+import { fetchWithTimeout } from './utils.js';
+
 export async function reverseGeocode(lat, lng) {
   try {
     const [nominatimRes, openMeteoRes] = await Promise.all([
-      fetch(
+      fetchWithTimeout(
         `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}`,
-        { headers: { 'User-Agent': 'SamtaAgent/1.0' } }
+        { headers: { 'User-Agent': 'SamtaAgent/1.0' } },
+        4000
       ),
-      fetch(
-        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&timezone=auto&forecast_days=0`
+      fetchWithTimeout(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&timezone=auto&forecast_days=0`,
+        {},
+        3000
       ),
     ]);
 

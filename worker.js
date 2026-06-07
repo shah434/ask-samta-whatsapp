@@ -88,8 +88,12 @@ export default {
       return new Response('Method not allowed', { status: 405 });
     }
 
+    let body;
+    try { body = await req.json(); } catch { return new Response('OK', { status: 200 }); }
+    // Extract phone early so the catch block can notify the user on any downstream error.
+    const debugPhone = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from;
+
     try {
-      const body = await req.json();
 
       const statuses = body?.entry?.[0]?.changes?.[0]?.value?.statuses;
       if (statuses) return new Response('OK', { status: 200 });
@@ -107,6 +111,16 @@ export default {
       if (SILENT_DROP_TYPES.has(messageType)) {
         return new Response('OK', { status: 200 });
       }
+
+      // Dedup: Meta retries delivery if it doesn't get a 200 within ~20s.
+      // A KV read here drops the duplicate before any DB or Claude work.
+      // Write is deferred so it doesn't add latency to the critical path.
+      const dedupKey = `seen:${messageId}`;
+      if (await env.KV.get(dedupKey)) {
+        console.log(`[dedup] dropping duplicate mid=${u}`);
+        return new Response('OK', { status: 200 });
+      }
+      ctx.waitUntil(env.KV.put(dedupKey, '1', { expirationTtl: 86400 }));
 
       if (!['text', 'image', 'location'].includes(messageType)) {
         await sendMessage(
@@ -129,11 +143,11 @@ export default {
         }
       }
 
-      // -- Scale brake: per-user daily rate limit (100/day) ------------------
+      // -- Scale brake: per-user daily rate limit (250/day) ------------------
       const today = new Date().toISOString().slice(0, 10);
       const rlKey = `ratelimit:${phone}:${today}`;
       const count = parseInt(await env.KV.get(rlKey) || '0', 10);
-      if (count >= 40000) {
+      if (count >= 250) {
         await sendMessage(phone, `You've hit today's limit 🙏🏾 Back tomorrow.`, env);
         return new Response('OK', { status: 200 });
       }
@@ -189,16 +203,23 @@ export default {
         getCalendarCached(env),
         needsFreshPending
           ? fetchPendingAction(phone, env)
-          : Promise.resolve(undefined),  // skip for fresh journeys
+          : Promise.resolve(null),  // null = skipped; undefined = fetch error
       ]);
 
       // Reconcile Supabase vs KV:
       //   undefined         → fetch error; keep KV value as-is
-      //   { exists: false } → ghost user: Supabase row was deleted but KV still has stale data.
-      //                       Delete the KV entry and fall into new-user creation below.
+      //   null              → fetch was skipped (fresh journey); clear stale KV pending
+      //   { exists: false } → ghost user: Supabase row was deleted but KV still has stale data
       //   { exists: true }  → normal: override KV pending_action with always-fresh Supabase value
       if (freshPending === undefined) {
         // fetch errored — keep whatever KV has
+      } else if (freshPending === null) {
+        // Fresh journey — fetchPendingAction was skipped. Clear any stale pending
+        // so it can't intercept a future bare reply on a different turn.
+        if (user?.pending_action) {
+          ctx.waitUntil(updateUser(phone, { pending_action: null }, env));
+          user.pending_action = null;
+        }
       } else if (freshPending && !freshPending.exists) {
         if (user) {
           // Ghost user: KV had stale data but Supabase row is gone — evict and re-create
@@ -209,16 +230,18 @@ export default {
         // else: genuinely new user — user is already null, nothing to evict
       } else if (freshPending && freshPending.exists && user) {
         user.pending_action = freshPending.pending_action;
-      } else if (freshPending === undefined && !needsFreshPending) {
-        // Fresh journey — fetchPendingAction was skipped. Clear any stale
-        // pending from KV in the background so it can't intercept future replies.
-        if (user?.pending_action) {
-          ctx.waitUntil(updateUser(phone, { pending_action: null }, env));
-          user.pending_action = null;
-        }
       }
 
       console.log(`[perf] phase1_parallel=${Date.now() - t0}ms type=${messageType}`);
+
+      // -- DB error: distinguish "Supabase failed" from "genuinely new user" --
+      // getUser returns undefined on an HTTP error (not just missing row).
+      // Treating that as a new user would send a welcome message to an active user.
+      if (user === undefined) {
+        console.log(`[db] getUser returned undefined (fetch error) — aborting`);
+        await sendMessage(phone, 'Something went wrong on my end — please try again in a moment 🙏🏾', env);
+        return new Response('OK', { status: 200 });
+      }
 
       // -- New user creation + welcome ---------------------------------------
       if (!user) {
@@ -249,9 +272,12 @@ export default {
       // invisible to the next request if it landed on a different edge node.
       const pendingDeleteRecord = readPending(user.pending_action);
       console.log(`[delete] check pending_action=${JSON.stringify(user.pending_action)?.slice(0,80)} need=${pendingDeleteRecord?.need}`);
-      if (pendingDeleteRecord?.need === 'delete_confirm' && messageType === 'text') {
+      if (pendingDeleteRecord?.need === 'delete_confirm') {
+        // Any message type cancels unless it's the exact text "YES".
+        // Images and location pins arriving mid-flow are treated as a cancel —
+        // they should never silently leave delete_confirm active to fire later.
         await updateUser(phone, { pending_action: null }, env);
-        if (text.trim().toUpperCase() === 'YES') {
+        if (messageType === 'text' && text.trim().toUpperCase() === 'YES') {
           await deleteUser(phone, env);
           await sendImage(phone, VIN_GOODBYE_URL, "You've been removed from the family. Take care. 🙏🏾", env);
         } else {
@@ -425,11 +451,12 @@ export default {
         const fastPending = readPending(user.pending_action);
         const reply = text.trim();
 
-        // Upvas type pick: user was asked Chovihar or Tivihar and replied
+        // Upvas type pick: user was asked Chovihar or Tivihar and replied.
+        // Anchored at ^ so "can I have dal during tivihar?" doesn't match.
         if (fastPending && fastPending.need === 'upvas_pick') {
-          const norm = reply.toLowerCase();
-          const isChovihar = /^1$|chovihar|chauvihar/.test(norm);
-          const isTivihar  = /^2$|tivihar/.test(norm);
+          const norm = reply.toLowerCase().trim();
+          const isChovihar = /^(1|chovihar|chauvihar)\b/i.test(norm);
+          const isTivihar  = /^(2|tivihar)\b/i.test(norm);
           if (isChovihar || isTivihar) {
             await updateUser(phone, { pending_action: null }, env);
             await sendMessage(phone, rulesFor(isChovihar ? 'upvas_chovihar' : 'upvas_tivihar'), env);
@@ -451,18 +478,26 @@ export default {
           }
           if (rbIntent.params.fast_term && rbIntent.params.fast_term !== 'pachkhan_general') {
             const ft = rbIntent.params.fast_term;
-            // Bare upvas from inside the fast menu → ask sub-type
-            if (ft === 'upvas') {
+            // If the user also mentioned a specific food (food_text), this is a
+            // verdict question ("can I eat rice during ekasan?") not a rules request.
+            // Clear fast_pick and fall through to Claude for a proper verdict.
+            if (rbIntent.params.food_text) {
+              await updateUser(phone, { pending_action: null }, env);
+              user.pending_action = null;
+              // fall through to handleRebuildFood
+            } else if (ft === 'upvas') {
+              // Bare upvas from inside the fast menu → ask sub-type
               const rec = serializePending({ need: 'upvas_pick', intent: rbIntent });
               await updateUser(phone, { pending_action: rec }, env);
               await sendMessage(phone, UPVAS_MENU, env);
               return new Response('OK', { status: 200 });
-            }
-            const rules = rulesFor(ft);
-            if (rules) {
-              await updateUser(phone, { pending_action: null }, env);
-              await sendMessage(phone, rules, env);
-              return new Response('OK', { status: 200 });
+            } else {
+              const rules = rulesFor(ft);
+              if (rules) {
+                await updateUser(phone, { pending_action: null }, env);
+                await sendMessage(phone, rules, env);
+                return new Response('OK', { status: 200 });
+              }
             }
           }
         }
@@ -515,17 +550,12 @@ export default {
 
     } catch (err) {
       console.log('Main handler error:', err.message, err.stack);
-      try {
-        const debugBody = await req.clone().json();
-        const debugPhone = debugBody?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from;
-        if (debugPhone) {
-          const msg = env.DEBUG === 'true'
-            ? `⚠️ Error: ${err.message}
-${(err.stack || '').slice(0, 500)}`
-            : 'Something went wrong on my end — please try again in a moment 🙏🏾';
-          await sendMessage(debugPhone, msg, env);
-        }
-      } catch {}
+      if (debugPhone) {
+        const msg = env.DEBUG === 'true'
+          ? `⚠️ Error: ${err.message}\n${(err.stack || '').slice(0, 500)}`
+          : 'Something went wrong on my end — please try again in a moment 🙏🏾';
+        try { await sendMessage(debugPhone, msg, env); } catch {}
+      }
       return new Response('OK', { status: 200 });
     }
   }

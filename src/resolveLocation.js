@@ -25,6 +25,8 @@
 // Folding them together would be a regression, so resolveLocation keeps four.
 // ============================================
 
+import { fetchWithTimeout } from './utils.js';
+
 const GEOCODE_URL = 'https://geocoding-api.open-meteo.com/v1/search';
 const NON_CITIES = ['me', 'here', 'my area', 'nearby', 'near me'];
 
@@ -54,9 +56,10 @@ export async function resolveLocation(cityRaw) {
     // --- US ZIP code: resolve via Nominatim postal search + Open-Meteo TZ ---
     if (/^\d{5}$/.test(raw)) {
       const [nomRes, _] = await Promise.all([
-        fetch(
+        fetchWithTimeout(
           `https://nominatim.openstreetmap.org/search?format=json&postalcode=${raw}&countrycodes=us&limit=1&addressdetails=1`,
-          { headers: { 'User-Agent': 'SamtaAgent/1.0' } }
+          { headers: { 'User-Agent': 'SamtaAgent/1.0' } },
+          4000
         ),
         Promise.resolve(),
       ]);
@@ -68,8 +71,10 @@ export async function resolveLocation(cityRaw) {
         const addr = r.address || {};
         const name = addr.city ?? addr.town ?? addr.village ?? addr.county ?? null;
         if (name) {
-          const tzRes = await fetch(
-            `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&timezone=auto&forecast_days=0`
+          const tzRes = await fetchWithTimeout(
+            `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&timezone=auto&forecast_days=0`,
+            {},
+            3000
           );
           const tzData = tzRes.ok ? await tzRes.json() : {};
           const timezone = tzData?.timezone;
@@ -123,7 +128,7 @@ export async function resolveLocation(cityRaw) {
     }
 
     const url = `${GEOCODE_URL}?name=${encodeURIComponent(cleanCity)}&count=5&language=en&format=json`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url, {}, 3000);
     const data = await res.json();
     const results = data.results || [];
 

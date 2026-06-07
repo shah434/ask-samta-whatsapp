@@ -5,8 +5,8 @@ import { formatEventsForClaude } from './calendar.js';
 import { callClaude } from './claude.js';
 import { sendMessage } from './whatsapp.js';
 import { updateUser } from './database.js';
-import { buildSystemPrompt, buildHistoryMessages, stripTags } from './utils.js';
-import { identifyProduct, searchProductIngredients } from './search.js';
+import { buildSystemPrompt, buildHistoryMessages, buildHistoryUpdate, stripTags } from './utils.js';
+import { searchProductIngredients } from './search.js';
 import { serializePending, readPending } from './pending.js';
 import { getStrictnessQuestion } from './onboarding.js';
 
@@ -48,51 +48,63 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
   // -- Build Claude messages --------------------------------------------------
   let claudeMessages = [];
   let searchSnippets = null;
-  let isLabel = true;
-  let productName = null;
   let scanBranch = null;
+  let productName = null;
+  let response; // set here for image branch A; set after the block for B and text
 
   if (messageType === 'image') {
     try {
       const { base64, mimeType } = await imagePromise;
       console.log(`[perf] image_ready=${Date.now() - t0}ms`);
 
-      ({ isLabel, productName } = await identifyProduct(base64, mimeType, env));
-      console.log(`[image] isLabel=${isLabel} product="${productName}" latency=${Date.now() - t0}ms`);
+      // Single Claude call: identify whether the ingredient list is visible AND
+      // analyse it if so. Branch A (label visible) returns the full verdict here,
+      // eliminating the separate identification round-trip. Branch B (product
+      // front) returns "PRODUCT: <name>" and we fall through to a Brave search
+      // followed by a second Claude call with the text-only search snippets.
+      const identifyPrompt = text
+        ? `${text}\n\nIf the full ingredient list is NOT visible in this image, reply with: PRODUCT: [full product name and brand]`
+        : 'If the full ingredient list is visible in this image, scan it and assess each ingredient for my diet. If only the product front is visible (no ingredient list), reply with: PRODUCT: [full product name and brand]';
 
-      if (isLabel) {
-        // Branch A: ingredient list visible — send image directly to Claude
-        scanBranch = 'A';
-        claudeMessages = [{
-          role: 'user',
-          content: [
-            { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
-            { type: 'text', text: text || 'Please scan this food label and check if it is safe for my diet.' }
-          ]
-        }];
-      } else {
-        // Branch B: product front — search for ingredients
+      const systemA = buildSystemPrompt(user, calendarData, '', null);
+      console.log(`[perf] claude_start=${Date.now() - t0}ms`);
+      const firstReply = await callClaude([{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
+          { type: 'text', text: identifyPrompt }
+        ]
+      }], systemA, env, 400);
+      console.log(`[perf] claude_done=${Date.now() - t0}ms`);
+
+      if (firstReply.trim().toUpperCase().startsWith('PRODUCT:')) {
+        // Branch B: product front — search for ingredients then call Claude again
         scanBranch = 'B';
-        const snippets = productName ? await searchProductIngredients(productName, env) : null;
-        console.log(`[image] branch=B snippets=${snippets ? 'found' : 'null'} product="${productName}"`);
+        productName = firstReply.trim().slice(8).trim() || null;
+        console.log(`[image] branch=B product="${productName}" latency=${Date.now() - t0}ms`);
 
+        const snippets = productName ? await searchProductIngredients(productName, env) : null;
         if (!snippets) {
           await sendMessage(phone,
             `I couldn't find ingredient info for ${productName || 'this product'} online. Can you send a photo of the back label or ingredients panel? 🙏🏾`,
             env);
           return true;
         }
-
         searchSnippets =
           `PRODUCT SEARCH RESULTS — ${productName}\n` +
           `User sent a photo of the product front (no ingredient list visible).\n` +
           `Web snippets retrieved to identify ingredients:\n\n${snippets}\n\n` +
           `Use these to identify likely ingredients. If no clear ingredient list, ask for the back label. Do not invent ingredients.`;
-
         claudeMessages = [{
           role: 'user',
           content: text || `Please check if ${productName} is safe for my diet based on the search results provided.`
         }];
+        // response will be set by the main callClaude below
+      } else {
+        // Branch A: ingredient list visible — first reply IS the full analysis
+        scanBranch = 'A';
+        console.log(`[image] branch=A latency=${Date.now() - t0}ms`);
+        response = firstReply;
       }
     } catch (err) {
       console.log('Image processing error:', err.message);
@@ -103,12 +115,13 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
     claudeMessages = [...buildHistoryMessages(user), { role: 'user', content: text }];
   }
 
-  // -- System prompt + Claude call -------------------------------------------
-  const system = buildSystemPrompt(user, calendarData, '', searchSnippets);
-  const maxTokens = messageType === 'image' && isLabel ? 400 : 250;
-  console.log(`[perf] claude_start=${Date.now() - t0}ms`);
-  const response = await callClaude(claudeMessages, system, env, maxTokens);
-  console.log(`[perf] claude_done=${Date.now() - t0}ms`);
+  // -- Second Claude call for branch B and all text messages -----------------
+  if (!response) {
+    const system = buildSystemPrompt(user, calendarData, '', searchSnippets);
+    console.log(`[perf] claude_start=${Date.now() - t0}ms`);
+    response = await callClaude(claudeMessages, system, env, 250);
+    console.log(`[perf] claude_done=${Date.now() - t0}ms`);
+  }
 
   let cleanResponse = stripTags(response)
     .replace(/TODAY_IS_TITHI:\s*(true|false)/gi, '')
@@ -119,7 +132,7 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
   if (messageType === 'image' && scanBranch) {
     try {
       await env.KV.put(
-        `log:image:${new Date().toISOString()}`,
+        `log:image:${new Date().toISOString()}:${Math.random().toString(36).slice(2, 8)}`,
         JSON.stringify({ productName, branch: scanBranch, snippetsFound: !!searchSnippets, response: cleanResponse, latencyMs: Date.now() - t0 }),
         { expirationTtl: 2592000 }
       );
@@ -180,15 +193,7 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
   console.log(`[perf] sent=${Date.now() - t0}ms TOTAL`);
 
   // -- History (deferred) ----------------------------------------------------
-  ctx.waitUntil(updateUser(phone, {
-    history_1_q: text,
-    history_1_a: cleanResponse,
-    history_2_q: user.history_1_q || '',
-    history_2_a: user.history_1_a || '',
-    history_3_q: user.history_2_q || '',
-    history_3_a: user.history_2_a || '',
-    message_count: (user.message_count || 0) + 1,
-  }, env));
+  ctx.waitUntil(updateUser(phone, buildHistoryUpdate(user, text, cleanResponse), env));
 
   return true;
 }

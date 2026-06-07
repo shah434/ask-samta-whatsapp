@@ -70,6 +70,8 @@ export function isBareReply(text) {
   if (/^[1-9][0-9]?$/.test(t)) return true;
   if (t.split(/\s+/).length > 2) return false;
   if (/\b(eat|safe|can|is|are|what|how|vegan|veg|jain)\b/i.test(t)) return false;
+  // Common acknowledgements/greetings that are never city names
+  if (/^(thanks?(\s+\w+)?|thank you|got it|good\s+(morning|afternoon|evening|night)|sounds good|great|perfect|no\s+(thanks?|problem|worries)|ok|okay|sure|yes|yep|yeah|nope|no|bye|goodbye)$/i.test(t)) return false;
   return t.length >= 2 && t.length <= 50;
 }
 

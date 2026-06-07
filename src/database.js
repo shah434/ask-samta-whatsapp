@@ -65,7 +65,7 @@ async function mergeUserKVOnly(phone, fields, env) {
 export async function fetchPendingAction(phone, env) {
   try {
     const res = await fetch(
-      `${env.SUPABASE_URL}/rest/v1/users?phone_number=eq.${phone}&select=pending_action&limit=1`,
+      `${env.SUPABASE_URL}/rest/v1/users?phone_number=eq.${encodeURIComponent(phone)}&select=pending_action&limit=1`,
       {
         headers: {
           apikey: env.SUPABASE_KEY,
@@ -103,7 +103,7 @@ export async function getUser(phone, env) {
   console.log(`[cache] miss phone=${phone}`);
   const t = Date.now();
   const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/users?phone_number=eq.${phone}&limit=1`,
+    `${env.SUPABASE_URL}/rest/v1/users?phone_number=eq.${encodeURIComponent(phone)}&limit=1`,
     {
       headers: {
         apikey: env.SUPABASE_KEY,
@@ -114,19 +114,19 @@ export async function getUser(phone, env) {
   const data = await res.json();
   console.log(`[cache] supabase_getUser=${Date.now() - t}ms status=${res.status}`);
 
-  if (!Array.isArray(data)) {
+  if (!res.ok || !Array.isArray(data)) {
     console.log(`[cache] supabase_getUser_error status=${res.status} body=${JSON.stringify(data)}`);
-    return null;
+    return undefined; // undefined = fetch error (caller must not treat as new user)
   }
 
-  const user = data[0] || null;
+  const user = data[0] || null; // null = genuinely new user
   if (user) await writeUserToKV(phone, user, env);
   return user;
 }
 
 export async function createUser(phone, fields, env) {
   const res = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/users`,
+    `${env.SUPABASE_URL}/rest/v1/users`,  // POST — no phone in URL
     {
       method: 'POST',
       headers: {
@@ -151,8 +151,8 @@ export async function createUser(phone, fields, env) {
 
 export async function deleteUser(phone, env) {
   // 1. Supabase first — hard delete the row
-  await fetch(
-    `${env.SUPABASE_URL}/rest/v1/users?phone_number=eq.${phone}`,
+  const res = await fetch(
+    `${env.SUPABASE_URL}/rest/v1/users?phone_number=eq.${encodeURIComponent(phone)}`,
     {
       method: 'DELETE',
       headers: {
@@ -161,8 +161,13 @@ export async function deleteUser(phone, env) {
       }
     }
   );
+  if (!res.ok) {
+    const errBody = await res.text();
+    console.log(`[db] deleteUser_error status=${res.status} body=${errBody.slice(0, 200)}`);
+    return; // Don't clear KV if Supabase delete failed — row still exists
+  }
 
-  // 2. Clear KV cache entry
+  // 2. Clear KV cache entry only after confirmed Supabase delete
   try {
     await env.KV.delete(`${KV_USER_PREFIX}${phone}`);
   } catch (err) {
@@ -190,7 +195,7 @@ export async function invalidateUserKV(phone, env) {
 export async function updateUser(phone, fields, env) {
   // 1. Supabase first — source of truth
   const patchRes = await fetch(
-    `${env.SUPABASE_URL}/rest/v1/users?phone_number=eq.${phone}`,
+    `${env.SUPABASE_URL}/rest/v1/users?phone_number=eq.${encodeURIComponent(phone)}`,
     {
       method: 'PATCH',
       headers: {

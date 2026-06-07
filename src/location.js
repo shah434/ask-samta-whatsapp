@@ -72,36 +72,3 @@ export async function searchTemples(community, location, env, coords = null) {
   return data.places || [];
 }
 
-export function detectLocation(text) {
-  const lower = text.toLowerCase();
-
-  const locationKeywords = [
-    'restaurant', 'restaurants', 'find jain', 'find baps',
-    'eat near', 'food near', 'where can i eat', 'where to eat'
-  ];
-
-  const isLocationQuery = locationKeywords.some(k => lower.includes(k));
-  if (!isLocationQuery) return null;
-
-const locationPatterns = [
-  /\bnear\s+(.+?)(?:\?|$)/i,
-  /\bin\s+(.+?)(?:\?|$)/i,
-  /\bnear\s+(\d{5})\b/i,
-  /\bin\s+(\d{5})\b/i,
-  /\b(\d{5})\b/i,
-  /\b([A-Z]{1,2}\d{1,2}\s?\d[A-Z]{2})\b/i
-];
-
-  for (const pattern of locationPatterns) {
-    const match = text.match(pattern);
-    if (match) {
-      const location = (match[1] || match[0]).trim();
-      if (['me', 'here', 'my area', 'nearby', 'near me'].includes(location.toLowerCase())) {
-        return 'unknown';
-      }
-      return location;
-    }
-  }
-
-  return 'unknown';
-}
