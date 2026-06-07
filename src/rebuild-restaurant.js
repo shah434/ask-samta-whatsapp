@@ -7,6 +7,8 @@
 import { cityJourneyClaims, handleCityJourney } from './rebuild-city-journey.js';
 import { searchRestaurants, searchTemples } from './location.js';
 import { sendMessage } from './whatsapp.js';
+import { updateUser } from './database.js';
+import { serializePending } from './pending.js';
 import { LOCATION_SHARE_FOR_RESULTS } from './prompts.js';
 
 export function rebuildRestaurantClaims(user, intent, text) {
@@ -41,51 +43,59 @@ async function answerRestaurant(phone, user, place, intent, env) {
   const loc = [place.name, place.admin1, place.country].filter(Boolean).join(', ') || user.city;
 
   // Show the location-sharing invite only when we silently used the saved city
-  // (no pin shared and no city typed this turn). If the user explicitly gave a
-  // location this message, skip the invite — they already know how.
-  const usedSavedCity = !intent.params?.locationPin && !intent.params?.city_raw;
+  // (no pin shared, no city typed, and not already a pin-refined result).
+  // _pin_refine flag is set on the stored intent when the invite fires so
+  // the second pass — after the user shares their pin — never shows it again.
+  const usedSavedCity = !intent.params?.locationPin
+    && !intent.params?.city_raw
+    && !intent.params?._pin_refine;
   const locationOffer = usedSavedCity ? LOCATION_SHARE_FOR_RESULTS : '';
 
   if (isTemple) {
     const results = await searchTemples(user.community, loc, env, coords);
     if (!results.length) {
       await sendMessage(phone, `I couldn't find any temples in ${loc} right now. Try searching "Jain center ${loc}" on Google Maps, or check jainworld.com 🙏🏾${locationOffer}`, env);
-      return;
+    } else {
+      const label = user.community === 'baps' ? 'BAPS mandirs' : 'Jain temples';
+      await sendMessage(phone, `Here are some ${label} near ${loc}:\n\n${formatPlaces(results)}\n\nCall ahead to confirm timings 🙏🏾${locationOffer}`, env);
     }
-    const label = user.community === 'baps' ? 'BAPS mandirs' : 'Jain temples';
-    await sendMessage(phone, `Here are some ${label} near ${loc}:\n\n${formatPlaces(results)}\n\nCall ahead to confirm timings 🙏🏾${locationOffer}`, env);
-    return;
-  }
-
-  const cuisine = intent.params?.cuisine || null;
-  const communityTag = user.community === 'baps' ? 'BAPS Swaminarayan friendly' : 'Jain friendly';
-
-  let results;
-  if (cuisine) {
-    // Specific cuisine requested — dual search because e.g. "Italian Jain friendly"
-    // has few hits; the vegetarian query fills the gaps.
-    const [r1, r2] = await Promise.all([
-      searchRestaurants(`${cuisine} ${communityTag}`, loc, env, coords),
-      searchRestaurants(`${cuisine} vegetarian`, loc, env, coords),
-    ]);
-    const seen = new Set();
-    results = [...r1, ...r2].filter(p => {
-      const key = (p.displayName?.text || '').toLowerCase();
-      if (!key || seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    }).slice(0, 5);
   } else {
-    // No cuisine — single community search is enough.
-    results = await searchRestaurants(communityTag, loc, env, coords);
+    const cuisine = intent.params?.cuisine || null;
+    const communityTag = user.community === 'baps' ? 'BAPS Swaminarayan friendly' : 'Jain friendly';
+
+    let results;
+    if (cuisine) {
+      const [r1, r2] = await Promise.all([
+        searchRestaurants(`${cuisine} ${communityTag}`, loc, env, coords),
+        searchRestaurants(`${cuisine} vegetarian`, loc, env, coords),
+      ]);
+      const seen = new Set();
+      results = [...r1, ...r2].filter(p => {
+        const key = (p.displayName?.text || '').toLowerCase();
+        if (!key || seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).slice(0, 5);
+    } else {
+      results = await searchRestaurants(communityTag, loc, env, coords);
+    }
+
+    if (!results.length) {
+      await sendMessage(phone, `I couldn't find vegetarian-friendly spots in ${loc} right now. Try a nearby larger city 🙏🏾${locationOffer}`, env);
+    } else {
+      await sendMessage(phone, `${formatPlaces(results)}${locationOffer}`, env);
+    }
   }
 
-  if (!results.length) {
-    await sendMessage(phone, `I couldn't find vegetarian-friendly spots in ${loc} right now. Try a nearby larger city 🙏🏾${locationOffer}`, env);
-    return;
+  // If we just showed the invite, arm a one-time city pending so the next
+  // location pin immediately re-runs this same restaurant search near the pin —
+  // without the user having to type "restaurants near me" again.
+  // _pin_refine=true on the stored intent prevents the invite from repeating.
+  if (usedSavedCity) {
+    const oneTimeIntent = { ...intent, params: { ...intent.params, _pin_refine: true } };
+    const rec = serializePending({ need: 'city', intent: oneTimeIntent });
+    if (rec) await updateUser(phone, { pending_action: rec }, env);
   }
-
-  await sendMessage(phone, `${formatPlaces(results)}${locationOffer}`, env);
 }
 
 export async function handleRebuildRestaurant(phone, text, user, intent, env) {
