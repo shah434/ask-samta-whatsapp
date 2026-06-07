@@ -30,9 +30,21 @@ function formatPlaces(results) {
 
 async function answerRestaurant(phone, user, place, intent, env) {
   const isTemple = intent.params?.place_type === 'temple';
-  const loc = user.city || [place.name, place.admin1, place.country].filter(Boolean).join(', ');
-  const coords = user.latitude != null ? { lat: user.latitude, lng: user.longitude } : null;
-  const locationOffer = coords ? '' : LOCATION_SHARE_FOR_RESULTS;
+
+  // `place` already reflects the correct priority:
+  //   1. WhatsApp location pin  →  reverseGeocoded pin coordinates
+  //   2. City typed in message  →  geocoded city coordinates
+  //   3. Saved profile city     →  placeFromSaved(user) coordinates
+  // Always use place coords for locationBias so Google Places searches
+  // the right spot regardless of which path resolved the location.
+  const coords = { lat: place.latitude, lng: place.longitude };
+  const loc = [place.name, place.admin1, place.country].filter(Boolean).join(', ') || user.city;
+
+  // Show the location-sharing invite only when we silently used the saved city
+  // (no pin shared and no city typed this turn). If the user explicitly gave a
+  // location this message, skip the invite — they already know how.
+  const usedSavedCity = !intent.params?.locationPin && !intent.params?.city_raw;
+  const locationOffer = usedSavedCity ? LOCATION_SHARE_FOR_RESULTS : '';
 
   if (isTemple) {
     const results = await searchTemples(user.community, loc, env, coords);
