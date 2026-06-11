@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Samta – Your Jain Assistant on WhatsApp</title>
+  <meta name="description" content="Samta is your free Jain assistant on WhatsApp. Ask about food labels, fasting days, tithi, sunset times, and Jain-friendly places near you." />
+
+  <!-- Preconnect to Google Fonts to reduce DNS/TLS time -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <!-- Only load the 3 weights actually used (drop 700 — headings use 600) -->
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --cream:      #F8F0E5;
+      --sand:       #EADBC8;
+      --mid:        #DAC0A3;
+      --terracotta: #102C57;
+      --terra-dark: #0A1F3D;
+      --espresso:   #0A1F3D;
+      --muted:      #6B5E4E;
+      --card-bg:    #F8F0E5;
+    }
+
+    body {
+      font-family: 'DM Sans', sans-serif;
+      background: var(--cream);
+      color: var(--espresso);
+    }
+
+    /* ── NAV ── */
+    nav {
+      background: var(--cream);
+      border-bottom: 1px solid var(--sand);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 48px;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .logo {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 1.5rem;
+      color: var(--terracotta);
+      letter-spacing: -0.5px;
+    }
+    .nav-cta {
+      background: var(--terracotta);
+      color: white;
+      border: none;
+      padding: 10px 22px;
+      border-radius: 100px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      text-decoration: none;
+      transition: background 0.2s;
+    }
+    .nav-cta:hover { background: var(--terra-dark); }
+    .nav-cta svg { width: 18px; height: 18px; }
+
+    /* ── HERO ── */
+    .hero {
+      background: linear-gradient(160deg, #F8F0E5 0%, #ECD9C0 35%, #D9BC9A 70%, #C9A87A 100%);
+      padding: 100px 48px 80px;
+      text-align: center;
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -60px; left: 50%;
+      transform: translateX(-50%);
+      width: 700px; height: 400px;
+      background: radial-gradient(ellipse, rgba(16,44,87,0.18) 0%, transparent 65%);
+      width: 900px; height: 500px;
+      pointer-events: none;
+    }
+    .hero-badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.45);
+      color: var(--espresso);
+      border: 1px solid rgba(255,255,255,0.7);
+      padding: 6px 16px;
+      border-radius: 100px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      margin-bottom: 24px;
+      text-transform: uppercase;
+      backdrop-filter: blur(4px);
+    }
+    .hero h1 {
+      font-family: 'DM Sans', sans-serif;
+      font-size: clamp(3.8rem, 10vw, 6.5rem);
+      line-height: 1.0;
+      color: var(--terracotta);
+      max-width: 700px;
+      margin: 0 auto 12px;
+      letter-spacing: -1px;
+    }
+    .hero-tagline {
+      font-family: 'DM Sans', sans-serif;
+      font-size: clamp(1rem, 2.5vw, 1.2rem);
+      font-weight: 500;
+      color: #2563EB;
+      letter-spacing: 0.3px;
+      line-height: 1.6;
+      margin-bottom: 28px !important;
+    }
+    .hero p {
+      font-size: 1.1rem;
+      color: var(--muted);
+      max-width: 500px;
+      margin: 0 auto 40px;
+      line-height: 1.7;
+    }
+    .hero-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--terracotta);
+      color: white;
+      padding: 16px 32px;
+      border-radius: 100px;
+      font-size: 1rem;
+      font-weight: 600;
+      text-decoration: none;
+      transition: background 0.2s, transform 0.15s;
+      box-shadow: 0 4px 20px rgba(16,44,87,0.25);
+    }
+    .hero-btn:hover { background: var(--terra-dark); transform: translateY(-1px); }
+    .hero-btn svg { width: 22px; height: 22px; }
+
+    /* ── FEATURES ── */
+    .features {
+      background: var(--sand);
+      padding: 80px 48px;
+    }
+    .section-label {
+      text-align: center;
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 600;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--terracotta);
+      margin-bottom: 14px;
+    }
+    .section-title {
+      font-family: 'DM Sans', sans-serif;
+      font-size: clamp(1.8rem, 3vw, 2.6rem);
+      text-align: center;
+      color: var(--espresso);
+      margin-bottom: 56px;
+    }
+    .cards {
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+      max-width: 860px;
+      margin: 0 auto;
+    }
+    .card {
+      background: var(--card-bg);
+      border-radius: 20px;
+      overflow: hidden;
+      box-shadow: 0 2px 16px rgba(61,43,31,0.07);
+      border: 1px solid rgba(61,43,31,0.07);
+      display: flex;
+      flex-direction: row;
+      align-items: stretch;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .card:hover { transform: translateY(-3px); box-shadow: 0 8px 30px rgba(61,43,31,0.14); }
+    .card-img {
+      width: 320px;
+      min-width: 320px;
+      flex-shrink: 0;
+      background: #0d0d0d;
+      border-radius: 20px 0 0 20px;
+      overflow: hidden;
+    }
+    .card-img .demo-screenshot {
+      width: 100%;
+      height: auto;
+      display: block;
+    }
+    .card-body {
+      padding: 36px 32px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+    }
+    .card-body h3 {
+      font-family: 'DM Sans', sans-serif;
+      font-size: 1.35rem;
+      color: var(--espresso);
+      margin-bottom: 12px;
+      line-height: 1.3;
+    }
+    .card-body p {
+      font-size: 0.95rem;
+      color: var(--muted);
+      line-height: 1.65;
+    }
+
+    /* ── SAMTA MEANING ── */
+    .samta-meaning {
+      background: var(--terracotta);
+      padding: 64px 48px;
+      text-align: center;
+    }
+    .samta-meaning .section-label { color: rgba(255,255,255,0.6); margin-bottom: 20px; }
+    .samta-meaning p {
+      font-family: 'DM Sans', sans-serif;
+      font-size: clamp(1.1rem, 2.5vw, 1.45rem);
+      font-weight: 400;
+      color: white;
+      max-width: 640px;
+      margin: 0 auto;
+      line-height: 1.65;
+      font-style: normal;
+    }
+    .samta-meaning p em {
+      font-style: normal;
+      opacity: 0.65;
+    }
+
+    /* ── STORY ── */
+    .story {
+      background: var(--cream);
+      padding: 90px 48px;
+      text-align: center;
+    }
+    .story .section-label { color: var(--terracotta); }
+    .story h2 {
+      font-family: 'DM Sans', sans-serif;
+      font-size: clamp(1.8rem, 3vw, 2.4rem);
+      color: var(--espresso);
+      max-width: 700px;
+      margin: 0 auto 24px;
+      line-height: 1.35;
+    }
+    .story p {
+      color: var(--muted);
+      font-size: 1.05rem;
+      max-width: 600px;
+      margin: 0 auto 20px;
+      line-height: 1.8;
+    }
+    .story p:last-of-type { margin-bottom: 0; }
+    .story-sig {
+      color: var(--espresso);
+      font-family: 'DM Sans', sans-serif;
+      font-size: 1.1rem;
+      margin-top: 36px;
+      font-style: italic;
+    }
+    .story-photo {
+      width: 100%;
+      max-width: 360px;
+      border-radius: 4px;
+      margin: 32px auto 40px;
+      display: block;
+      box-shadow: 0 4px 24px rgba(61,43,31,0.15);
+      filter: sepia(15%);
+    }
+
+
+    /* ── CLOSING CTA ── */
+    .closing-cta {
+      background: var(--sand);
+      padding: 90px 48px;
+      text-align: center;
+    }
+    .closing-cta h2 {
+      font-family: 'DM Sans', sans-serif;
+      font-size: clamp(1.8rem, 3vw, 2.6rem);
+      color: var(--espresso);
+      margin-bottom: 16px;
+      line-height: 1.3;
+    }
+    .closing-cta p {
+      color: var(--muted);
+      font-size: 1.05rem;
+      margin-bottom: 36px;
+      line-height: 1.7;
+    }
+    .closing-cta .hero-btn {
+      background: var(--terracotta);
+    }
+    .closing-cta .hero-btn:hover { background: var(--terra-dark); }
+    @media (max-width: 768px) { .closing-cta { padding: 70px 24px; } }
+
+    /* ── FOOTER ── */
+    footer {
+      background: var(--espresso);
+      color: rgba(255,255,255,0.7);
+      padding: 64px 48px 32px;
+      font-size: 0.875rem;
+    }
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 2fr 1fr 1fr 1fr;
+      gap: 48px;
+      max-width: 1100px;
+      margin: 0 auto 48px;
+    }
+    .footer-brand .logo { color: white; font-size: 1.3rem; margin-bottom: 12px; }
+    .footer-brand p { color: rgba(255,255,255,0.5); line-height: 1.7; font-size: 0.85rem; margin-bottom: 6px; }
+    .footer-col h4 {
+      color: rgba(255,255,255,0.4);
+      font-size: 0.72rem;
+      font-weight: 600;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      margin-bottom: 16px;
+    }
+    .footer-col a {
+      display: block;
+      color: rgba(255,255,255,0.65);
+      text-decoration: none;
+      margin-bottom: 10px;
+      font-size: 0.88rem;
+      transition: color 0.15s;
+    }
+    .footer-col a:hover { color: white; }
+    .footer-bottom {
+      border-top: 1px solid rgba(255,255,255,0.1);
+      padding-top: 24px;
+      max-width: 1100px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      color: rgba(255,255,255,0.35);
+      font-size: 0.8rem;
+    }
+
+    /* ── FOUNDER PHOTOS ── */
+    .founder-photos {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin-top: 36px;
+      margin-bottom: 4px;
+    }
+    .founder-photo-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .founder-photo {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      object-fit: cover;
+      border: 2px solid var(--sand);
+      box-shadow: 0 2px 12px rgba(61,43,31,0.15);
+    }
+    .founder-name {
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    /* ── WIDGET ── */
+    .wa-float {
+      position: fixed;
+      bottom: 28px;
+      right: 28px;
+      background: #25D366;
+      border-radius: 100px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 14px 22px;
+      box-shadow: 0 4px 20px rgba(37,211,102,0.5);
+      cursor: pointer;
+      z-index: 999;
+      transition: transform 0.2s, box-shadow 0.2s;
+      text-decoration: none;
+    }
+    .wa-float:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(37,211,102,0.55); }
+    .wa-float svg { width: 24px; height: 24px; fill: white; flex-shrink: 0; }
+    .wa-float-label {
+      color: white;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 0.9rem;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .wa-dot {
+      position: absolute;
+      top: 4px; right: 4px;
+      width: 12px; height: 12px;
+      background: #FF3B30;
+      border-radius: 50%;
+      border: 2px solid white;
+    }
+
+    /* ── SCROLL REVEAL ── */
+    .reveal {
+      opacity: 0;
+      transform: translateY(28px);
+      transition: opacity 0.65s ease, transform 0.65s ease;
+    }
+    .reveal.visible { opacity: 1; transform: translateY(0); }
+    .cards .card:nth-child(2) { transition-delay: 0.12s; }
+    .cards .card:nth-child(3) { transition-delay: 0.24s; }
+
+    /* ── NOISE TEXTURE ── */
+    .hero, .features, .story, .closing-cta {
+      position: relative;
+    }
+    .hero::after, .features::after, .story::after, .closing-cta::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      opacity: 0.030;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .hero > *, .features > *, .story > *, .closing-cta > * { position: relative; z-index: 1; }
+
+    /* ── SECTION DIVIDERS ── */
+    .section-divider {
+      background: var(--cream);
+      text-align: center;
+      padding: 0;
+      height: 40px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+    }
+    .section-divider::before, .section-divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--sand);
+      margin: 0 20px;
+    }
+    .section-divider span {
+      color: var(--mid);
+      font-size: 0.75rem;
+      letter-spacing: 6px;
+    }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 768px) {
+      nav { padding: 16px 20px; }
+      .hero { padding: 70px 24px 60px; }
+      .features { padding: 60px 20px; }
+      .card { flex-direction: column; }
+      .card-img {
+        width: 100%;
+        min-width: unset;
+        height: 320px;
+        border-radius: 20px 20px 0 0;
+      }
+      .card-img .demo-screenshot {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: top;
+      }
+      .card-body { padding: 24px; }
+      .story { padding: 70px 24px; }
+      .who { flex-direction: column; padding: 60px 24px; gap: 32px; text-align: center; }
+      .who-text .section-label { text-align: center; }
+      footer { padding: 40px 20px 24px; }
+      .footer-grid { grid-template-columns: 1fr 1fr; gap: 32px; }
+      .footer-bottom { flex-direction: column; gap: 8px; text-align: center; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- NAV -->
+  <nav>
+    <div class="logo">Samta</div>
+    <a href="https://wa.me/1234567890" class="nav-cta" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.554 4.118 1.525 5.847L.057 23.882l6.197-1.448A11.934 11.934 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.794 9.794 0 01-5.001-1.374l-.359-.214-3.68.859.925-3.585-.234-.368A9.79 9.79 0 012.182 12C2.182 6.57 6.57 2.182 12 2.182S21.818 6.57 21.818 12 17.43 21.818 12 21.818z"/></svg>
+      Talk to Samta on WhatsApp
+    </a>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <span class="hero-badge">✦ Introducing ✦</span>
+    <h1>Samta</h1>
+    <p class="hero-tagline">Your daily Jain helper,<br/>to make Jain living easier.</p>
+    <p>Ask Samta anything Jain — from food labels and fasting days to pachakhan and sunset times — and get simple answers that guide your day.</p>
+    <a href="https://wa.me/1234567890" class="hero-btn" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.554 4.118 1.525 5.847L.057 23.882l6.197-1.448A11.934 11.934 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.794 9.794 0 01-5.001-1.374l-.359-.214-3.68.859.925-3.585-.234-.368A9.79 9.79 0 012.182 12C2.182 6.57 6.57 2.182 12 2.182S21.818 6.57 21.818 12 17.43 21.818 12 21.818z"/></svg>
+      Talk to Samta on WhatsApp
+    </a>
+  </section>
+
+  <!-- FEATURES -->
+  <section class="features">
+    <span class="section-label">A few ways</span>
+    <h2 class="section-title">How Samta can help</h2>
+    <div class="cards">
+      <div class="card reveal">
+        <div class="card-img">
+          <video class="demo-screenshot" autoplay loop muted playsinline preload="none" data-src="Image.mp4">
+            <source data-src="Image.mp4" type="video/mp4" />
+          </video>
+        </div>
+        <div class="card-body">
+          <h3>Check if your food is Jain-friendly</h3>
+          <p>Scan a food or medicine label to see if it is Jain- and vegetarian-friendly. Samta flags E-number additives, gelatin, and more — and suggests alternatives.</p>
+        </div>
+      </div>
+      <div class="card reveal">
+        <div class="card-img">
+          <video class="demo-screenshot" autoplay loop muted playsinline preload="none" data-src="Fast.mp4">
+            <source data-src="Fast.mp4" type="video/mp4" />
+          </video>
+        </div>
+        <div class="card-body">
+          <h3>Plan your fasts</h3>
+          <p>Get today's tithi, sunrise and sunset times, and pachakhan details based on the Jain calendar. Samta is all connected.</p>
+        </div>
+      </div>
+      <div class="card reveal">
+        <div class="card-img">
+          <video class="demo-screenshot" autoplay loop muted playsinline preload="none" data-src="Restaurant.mp4">
+            <source data-src="Restaurant.mp4" type="video/mp4" />
+          </video>
+        </div>
+        <div class="card-body">
+          <h3>Find Jain-friendly places nearby</h3>
+          <p>Discover nearby temples, Jain-friendly restaurants, and vegetarian food options wherever you go. Samta can guide.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- SAMTA MEANING -->
+  <section class="samta-meaning reveal">
+    <span class="section-label">What we believe</span>
+    <p>"Samta — <em>समता</em> — equanimity. The belief that every living being deserves the same gentle regard."</p>
+  </section>
+
+  <!-- STORY / WHO WE ARE -->
+  <section class="story reveal">
+    <span class="section-label">Why we are doing it</span>
+    <h2>A small act of keeping their light alive.</h2>
+    <img src="dadipic.png" alt="Our grandparents" class="story-photo" loading="lazy" decoding="async" />
+    <p>We grew up in the warmth of two people who believed, with every fiber of their being, that every living thing deserves gentleness.</p>
+    <p><strong>Our grandmother followed Jainism — a quiet, deep commitment to not harming a single soul, not even the smallest ant. Our grandfather lived with kindness — always helping others and lifting people up.</strong></p>
+    <p>Samta is our love letter to them. A small act of keeping their light alive.</p>
+    <p>We know living by these values isn't always easy. That's why we're here. Whether you're vegan, vegetarian, or simply trying to be more intentional about how you live your life — we hope this makes that journey a little easier.</p>
+    <p class="story-sig">Love,<br/>Anish and Parth</p>
+    <div class="founder-photos">
+      <div class="founder-photo-wrap">
+        <img src="anish.png" alt="Anish" class="founder-photo" loading="lazy" decoding="async" />
+        <span class="founder-name">Anish</span>
+      </div>
+      <div class="founder-photo-wrap">
+        <img src="Parth.png" alt="Parth" class="founder-photo" loading="lazy" decoding="async" />
+        <span class="founder-name">Parth</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- CLOSING CTA -->
+  <section class="closing-cta reveal">
+    <h2>Ready? Ask anything.</h2>
+    <p style="margin-bottom: 20px;">Nothing to download. No sign-up.</p>
+    <a href="https://wa.me/1234567890" class="hero-btn" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="white"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.554 4.118 1.525 5.847L.057 23.882l6.197-1.448A11.934 11.934 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.794 9.794 0 01-5.001-1.374l-.359-.214-3.68.859.925-3.585-.234-.368A9.79 9.79 0 012.182 12C2.182 6.57 6.57 2.182 12 2.182S21.818 6.57 21.818 12 17.43 21.818 12 21.818z"/></svg>
+      Talk to Samta on WhatsApp
+    </a>
+    <p style="margin-top: 16px;">In English, Gujarati, and Hindi. It's free.</p>
+  </section>
+
+  <!-- FOOTER -->
+  <footer>
+    <div class="footer-grid">
+      <div class="footer-brand">
+        <div class="logo">Samta</div>
+        <p>Your daily Jain helper on WhatsApp.</p>
+      </div>
+      <div class="footer-col">
+        <h4>Spread the word</h4>
+        <a href="#" onclick="shareSamta(); return false;">Share with a friend</a>
+        <a href="https://wa.me/1234567890" target="_blank" rel="noopener">Open on WhatsApp</a>
+      </div>
+      <div class="footer-col">
+        <h4>Support</h4>
+        <a href="mailto:hello@asksamta.com?subject=Bug Report">Report a bug</a>
+        <a href="mailto:hello@asksamta.com?subject=Feature Suggestion">Suggest a feature</a>
+        <a href="mailto:hello@asksamta.com">Contact us</a>
+      </div>
+      <div class="footer-col">
+        <h4>Legal</h4>
+        <a href="#">Privacy policy</a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- FLOATING WIDGET -->
+  <a href="https://wa.me/1234567890" target="_blank" class="wa-float" aria-label="Chat with Samta on WhatsApp">
+    <div class="wa-dot"></div>
+    <svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M12 0C5.373 0 0 5.373 0 12c0 2.123.554 4.118 1.525 5.847L.057 23.882l6.197-1.448A11.934 11.934 0 0012 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.794 9.794 0 01-5.001-1.374l-.359-.214-3.68.859.925-3.585-.234-.368A9.79 9.79 0 012.182 12C2.182 6.57 6.57 2.182 12 2.182S21.818 6.57 21.818 12 17.43 21.818 12 21.818z"/></svg>
+    <span class="wa-float-label">Chat with Samta</span>
+  </a>
+
+  <script>
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        if (e.isIntersecting) {
+          e.target.classList.add('visible');
+          observer.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.1 });
+    document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+    // Share Samta
+    function shareSamta() {
+      if (navigator.share) {
+        navigator.share({
+          title: 'Samta – Your Jain Assistant on WhatsApp',
+          text: 'Check out Samta – a free WhatsApp bot that helps with Jain food labels, fasting days, and finding Jain-friendly places.',
+          url: window.location.href
+        });
+      } else {
+        navigator.clipboard.writeText(window.location.href).then(() => {
+          alert('Link copied to clipboard!');
+        });
+      }
+    }
+
+    // Play only the video currently in view — pause all others
+    const videoObserver = new IntersectionObserver((entries) => {
+      entries.forEach(e => {
+        const video = e.target.querySelector('.demo-screenshot');
+        if (!video) return;
+        if (e.isIntersecting) {
+          // Lazy-load on first sight
+          if (!video.dataset.loaded) {
+            video.dataset.loaded = '1';
+            video.querySelector('source').src = video.dataset.src;
+            video.load();
+          }
+          // Pause every other video
+          document.querySelectorAll('.demo-screenshot').forEach(v => {
+            if (v !== video) { v.pause(); v.currentTime = 0; }
+          });
+          video.play().catch(() => {});
+        } else {
+          video.pause();
+          video.currentTime = 0;
+        }
+      });
+    }, { threshold: 0.6 });
+
+    document.querySelectorAll('.card').forEach(card => videoObserver.observe(card));
+  </script>
+
+</body>
+</html>

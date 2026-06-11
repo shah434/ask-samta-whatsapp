@@ -15,3 +15,6 @@ dist/
 # Logs
 *.log
 .git-sync.log
+
+# Mockup — original GIFs replaced by compressed MP4s
+mockup/*.gif
