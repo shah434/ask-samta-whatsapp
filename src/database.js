@@ -57,6 +57,34 @@ async function mergeUserKVOnly(phone, fields, env) {
 
 // Fetch pending_action directly from Supabase — always fresh, never stale.
 // Run this in parallel with getUser so it adds no wall-clock latency.
+// Always reads profile fields fresh from Supabase — KV is unreliable for these
+// because KV eventual consistency means a write at one edge PoP may not be
+// visible at another PoP for up to 60s.
+// Returns:
+//   { exists: true, strictness, community, city, language } — user found
+//   { exists: false }                                        — no row (KV ghost)
+//   undefined                                                — fetch error
+export async function fetchProfile(phone, env) {
+  try {
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/users?phone_number=eq.${encodeURIComponent(phone)}&select=strictness,community,city,language&limit=1`,
+      { headers: { apikey: env.SUPABASE_KEY, Authorization: `Bearer ${env.SUPABASE_KEY}` } }
+    );
+    const data = await res.json();
+    if (!res.ok || !Array.isArray(data)) {
+      console.log(`[db] fetchProfile http_error status=${res.status}`);
+      return undefined;
+    }
+    if (data.length === 0) return { exists: false };
+    const { strictness, community, city, language } = data[0];
+    return { exists: true, strictness, community, city, language };
+  } catch (err) {
+    console.log(`[db] fetchProfile_error phone=${phone} err=${err.message}`);
+    return undefined;
+  }
+}
+
+// Run this in parallel with getUser so it adds no wall-clock latency.
 // The result overwrites user.pending_action from the KV cache.
 // Returns:
 //   { exists: true,  pending_action: string|null } — user found in Supabase
@@ -211,17 +239,29 @@ export async function updateUser(phone, fields, env) {
     console.log(`[db] updateUser_error status=${patchRes.status} fields=${JSON.stringify(Object.keys(fields))} body=${errBody.slice(0,200)}`);
   }
 
-  // 2. Merge fields into KV cache (best effort — non-fatal on failure)
-  // Only updates an existing entry; does not create one if absent.
+  // 2. KV update — strategy depends on what changed.
+  // Profile fields (strictness, community, city, language) must invalidate KV
+  // entirely so the next getUser re-fetches fresh from Supabase. KV eventual
+  // consistency means a merge at one edge PoP may not be visible at another
+  // PoP for up to 60s, causing stale profile reads.
+  // History/pending fields are low-stakes — a merge is fine and avoids the
+  // extra Supabase read on the next message.
+  const PROFILE_FIELDS = new Set(['strictness', 'community', 'city', 'language']);
+  const touchesProfile = Object.keys(fields).some(k => PROFILE_FIELDS.has(k));
+
   try {
-    const cached = await env.KV.get(`${KV_USER_PREFIX}${phone}`);
-    if (cached) {
-      const user = JSON.parse(cached);
-      await env.KV.put(
-        `${KV_USER_PREFIX}${phone}`,
-        JSON.stringify({ ...user, ...fields }),
-        { expirationTtl: KV_USER_TTL }
-      );
+    if (touchesProfile) {
+      await env.KV.delete(`${KV_USER_PREFIX}${phone}`);
+    } else {
+      const cached = await env.KV.get(`${KV_USER_PREFIX}${phone}`);
+      if (cached) {
+        const user = JSON.parse(cached);
+        await env.KV.put(
+          `${KV_USER_PREFIX}${phone}`,
+          JSON.stringify({ ...user, ...fields }),
+          { expirationTtl: KV_USER_TTL }
+        );
+      }
     }
   } catch (err) {
     console.log(`[cache] kv_update_error phone=${phone} err=${err.message}`);

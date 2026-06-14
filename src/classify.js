@@ -68,8 +68,8 @@ const RE_ENGLISH_FAST = /\b(fast|fasting|paryushana|paryushan|ekadashi|nirjala|j
 
 const RE_GREETING = /^(hi|hello|hey|hiya|yo|namaste|namaskar|jai jinendra|jai swaminarayan|hola|good (morning|afternoon|evening))\b[\s!.?]*$/i;
 const RE_ACCOUNT  = /\b(delete me|delete my account|delete my data|remove my data|remove me|unsubscribe|stop using|forget me|opt out|wipe my)\b/i;
-const RE_CITY_STATEMENT = /^(?:my city is|i live in|i'?m in|set my city to|change my city to|update my city to)\s+([a-zA-Z][a-zA-Z\s,]+?)[?.!]*$/i;
-const RE_STRICTNESS_UPDATE = /\b(?:make me|set me to|i'?m|i am|change (?:my strictness )?to|switch (?:me )?to|update (?:my )?strictness to)\s+(strict|moderate|flexible)\b/i;
+const RE_CITY_STATEMENT = /^(?:my city is|i live in|i'?m (?:from|in)|set (?:my )?city to|change my city to|update my city to)\s+([a-zA-Z][a-zA-Z\s,]+?)[?.!]*$/i;
+const RE_STRICTNESS_UPDATE = /\b(?:make (?:me|it)|set (?:me|it|my (?:strict\w*|level|setting\w*|preference\w*)) to|i'?m|i am|changed? (?:my (?:strict\w*|level|setting\w*) |it )?to|switch (?:me )?to|update (?:my (?:strict\w*|level|setting\w*) )?to)\s+(strict|moderate|flexible)\b/i;
 // Anchored at both ends so "I'm Jain, can I eat X?" doesn't fire.
 const RE_COMMUNITY_UPDATE = /^(?:i'?m|i am|make me|set (?:my community )?to|switch (?:my community|me) to|change (?:my community|me) to|i follow)\s+(?:a\s+)?(baps|jain)[?.!]*$/i;
 

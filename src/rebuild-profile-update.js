@@ -27,19 +27,12 @@ export function profileUpdateClaims(user, intent, text) {
 export async function handleProfileUpdate(phone, text, user, intent, env) {
   const pending = readPending(user.pending_action);
 
-  // Resume: 1/2/3 reply to pending strictness ask
-  if (pending && pending.need === 'strictness') {
-    const strictness = parseStrictnessInput(text);
-    if (strictness) {
-      await updateUser(phone, { strictness, pending_action: null }, env);
-      await sendMessage(phone, `Got it 🙏🏾 set you to ${strictness}. Ask me anything!`, env);
-      return true;
-    }
-    return false;
-  }
-
-  // Fresh: explicit strictness declaration
-  const strictness = intent.params.strictness_level;
+  // Fresh explicit declaration takes priority — classify already extracted the level.
+  // Check this BEFORE pending so "set my strictness to strict" always wins over
+  // a stale pending strictness ask.
+  const strictness = intent.params.strictness_level
+    // Fallback: 1/2/3 reply to a pending strictness ask
+    || (pending?.need === 'strictness' ? parseStrictnessInput(text) : null);
   if (strictness) {
     await updateUser(phone, { strictness, pending_action: null }, env);
     await sendMessage(phone, `Got it 🙏🏾 set you to ${strictness}. Ask me anything!`, env);

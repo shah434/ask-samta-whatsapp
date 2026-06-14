@@ -114,7 +114,11 @@ TITHI RULE: Never state the tithi name or that today is/isn't a tithi — that l
   const sun    = sunData        ? `\n${sunData}`        : '';
   const search = searchSnippets ? `\n${searchSnippets}` : '';
 
-  const dynamicContent = profile + calendar + sun + search;
+  const strictnessReminder = !user.strictness
+    ? `\nSTRICTNESS OVERRIDE: This user has NO strictness set. For label scans, you MUST NOT output ✅ SAFE or ✋ NOT SAFE as the top verdict if any ingredient has level-dependent rules. Use ⚠️ UNCERTAIN and show the per-level breakdown.`
+    : '';
+
+  const dynamicContent = profile + calendar + sun + search + strictnessReminder;
 
   return [
     {

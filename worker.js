@@ -11,7 +11,7 @@ import { handleRebuildRestaurant, rebuildRestaurantClaims } from './src/rebuild-
 import { handleCityUpdate, cityUpdateClaims } from './src/rebuild-city-update.js';
 import { handleProfileUpdate, profileUpdateClaims } from './src/rebuild-profile-update.js';
 import { handleRebuildTithi, tithiClaims } from './src/rebuild-tithi.js';
-import { getUser, createUser, updateUser, deleteUser, fetchPendingAction } from './src/database.js';
+import { getUser, createUser, updateUser, deleteUser, fetchPendingAction, fetchProfile } from './src/database.js';
 import { routeFallback } from './src/route-fallback.js';
 import { sendMessage, sendReaction, sendImage, getImageAsBase64 } from './src/whatsapp.js';
 import { handleRebuildFood } from './src/rebuild-food.js';
@@ -196,14 +196,15 @@ export default {
         : null;
 
       let user, calendarEvents;
-      let freshPending;
-      [, user, calendarEvents, freshPending] = await Promise.all([
+      let freshPending, freshProfile;
+      [, user, calendarEvents, freshPending, freshProfile] = await Promise.all([
         sendReaction(phone, messageId, env),
         getUser(phone, env),
         getCalendarCached(env),
         needsFreshPending
           ? fetchPendingAction(phone, env)
           : Promise.resolve(null),  // null = skipped; undefined = fetch error
+        fetchProfile(phone, env),
       ]);
 
       // Reconcile Supabase vs KV:
@@ -230,6 +231,17 @@ export default {
         // else: genuinely new user — user is already null, nothing to evict
       } else if (freshPending && freshPending.exists && user) {
         user.pending_action = freshPending.pending_action;
+      }
+
+      // Always overwrite KV profile fields with fresh Supabase values.
+      // KV eventual consistency means profile changes (strictness, city, etc.)
+      // can take up to 60s to propagate across edge PoPs — this guarantees freshness.
+      if (freshProfile && freshProfile.exists && user) {
+        const { strictness, community, city, language } = freshProfile;
+        if (strictness  !== undefined) user.strictness  = strictness;
+        if (community   !== undefined) user.community   = community;
+        if (city        !== undefined) user.city        = city;
+        if (language    !== undefined) user.language    = language;
       }
 
       console.log(`[perf] phase1_parallel=${Date.now() - t0}ms type=${messageType}`);
