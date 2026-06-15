@@ -201,13 +201,10 @@ export default {
         ? getImageAsBase64(message.image.id, message.image.mime_type, env)
         : null;
 
-      // Reaction is fire-and-forget — result is never used. Registered with
-      // ctx.waitUntil so it survives any fast-exit path added in future.
-      ctx.waitUntil(sendReaction(phone, messageId, env));
-
       let user, calendarEvents;
       let freshPending, freshProfile;
-      [user, calendarEvents, freshPending, freshProfile] = await Promise.all([
+      [, user, calendarEvents, freshPending, freshProfile] = await Promise.all([
+        sendReaction(phone, messageId, env),
         getUser(phone, env),
         getCalendarCached(env),
         needsFreshPending
