@@ -21,10 +21,33 @@ You can ask me things like:
 Or send a photo of any food label, menu, or product to scan 🙏🏾`;
 }
 
+export function getStrictnessDetails(community) {
+  if (community === 'baps') {
+    return `Here's what each level means for BAPS:
+
+*Strict* — No onion or garlic in any form (powder, extract, flakes, sauces). No meat, fish, eggs, poultry, seafood, or alcohol in any form including cooking wine.
+
+*Moderate* — No onion or garlic in obvious forms (curry paste, gravies, spice blends). Core rules apply: no meat, fish, eggs, or alcohol.
+
+*Flexible* — Basic vegetarian rules. Onion and garlic are permitted. Only meat, fish, eggs, seafood, and alcohol are avoided.`;
+  }
+  return `Here's what each level means:
+
+*Strict* — No root vegetables in any form (potato, carrot, radish, beetroot, yam — including powders and starches), no brinjal/eggplant or figs, no mushrooms or yeast, no fermented foods, no sprouted pulses. Onion and garlic never permitted.
+
+*Moderate* — Root vegetables are allowed. Brinjal and mushrooms are noted but not blocked. Core rules: no meat, eggs, honey, onion, garlic, or alcohol.
+
+*Flexible* — Basic vegetarian rules. Onion and garlic are permitted. Only meat, fish, eggs, honey, gelatin, and alcohol are avoided.`;
+}
+
 export function getStrictnessQuestion() {
   return `So I can tailor future answers — which fits you?
 1 — Strict (no root veg, no fermented, no exceptions)
 2 — Moderate (core rules, flexible on edge cases)
-3 — Flexible (basic vegetarian rules)`;
+3 — Flexible (basic vegetarian rules)
+
+Type *details* to see what's allowed at each level before choosing.
+
+💡 Type *help* anytime to see what else I can do.`;
 }
 

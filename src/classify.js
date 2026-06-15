@@ -199,16 +199,20 @@ export function classify(message, hasImage = false) {
   }
 
   // 5. Detect signals (order below resolves multi-signal messages).
+  // Negation guard: "It's not paryushan", "I'm not fasting", "not a tithi" etc.
+  // Shared by hasFast and isCalendar so negated phrases don't leak into either journey.
+  const RE_NEGATED_FAST = /\b(not|isn'?t|aren'?t|no|it'?s not)\s+(?:paryushan(?:a)?|a fast|fasting|a tithi|ekadashi)\b/i;
+  const isNegatedFast = RE_NEGATED_FAST.test(lower);
   const fast = detectFastTerm(text);
   const englishFast = RE_ENGLISH_FAST.test(lower);
-  const hasFast = fast.matched || englishFast;
+  const hasFast = (fast.matched || englishFast) && !isNegatedFast;
   const hasFoodIntent = RE_FOOD_INTENT.test(lower);
   const isSunset = RE_SUNSET.test(lower) || RE_SUNRISE.test(lower);
   const isRestaurant = RE_RESTAURANT.test(lower) || RE_TEMPLE.test(lower);
   const isTemple     = RE_TEMPLE.test(lower);
   const isSubstitute = RE_SUBSTITUTE.test(lower);
   const isMedicine = RE_MEDICINE.test(lower);
-  const isCalendar = RE_CALENDAR.test(lower);
+  const isCalendar = RE_CALENDAR.test(lower) && !isNegatedFast;
 
   // 5b. CITY UPDATE — explicit profile statement ("my city is X", "I live in X").
   //     Placed AFTER signal detection so sunset/restaurant/calendar always win on
@@ -231,9 +235,12 @@ export function classify(message, hasImage = false) {
   // 5c. PROFILE UPDATE — explicit strictness or community declaration.
   if (!isSunset && !isRestaurant && !isCalendar) {
     const strictnessStmt = text.match(RE_STRICTNESS_UPDATE);
-    if (strictnessStmt?.[1]) {
+    // Also catch bare level words sent alone ("Moderate", "strict", "flexible")
+    // so replies to the strictness question always update the DB, even without pending.
+    const bareLevel = /^(strict|moderate|flexible)[.!?]*$/i.exec(text.trim());
+    if (strictnessStmt?.[1] || bareLevel?.[1]) {
       intent.journey = 'profile_update';
-      intent.params.strictness_level = strictnessStmt[1].toLowerCase();
+      intent.params.strictness_level = (strictnessStmt?.[1] || bareLevel?.[1]).toLowerCase();
       intent.prompt_blocks = [];
       return intent;
     }

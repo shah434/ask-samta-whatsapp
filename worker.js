@@ -15,7 +15,7 @@ import { getUser, createUser, updateUser, deleteUser, fetchPendingAction, fetchP
 import { routeFallback } from './src/route-fallback.js';
 import { sendMessage, sendReaction, sendImage, getImageAsBase64 } from './src/whatsapp.js';
 import { handleRebuildFood } from './src/rebuild-food.js';
-import { DEFAULT_DIET, getWelcomeMessage } from './src/onboarding.js';
+import { DEFAULT_DIET, getWelcomeMessage, getStrictnessDetails, getStrictnessQuestion } from './src/onboarding.js';
 import { getCalendarCached, getTodayAndUpcomingEvents } from './src/calendar.js';
 // ────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -28,6 +28,8 @@ const VIN_STAY_URL = 'https://raw.githubusercontent.com/shah434/whatsapp-religio
 const SILENT_DROP_TYPES = new Set([
   'reaction', 'system', 'interactive', 'button', 'unsupported', 'unknown'
 ]);
+
+const CITY_JOURNEY_NAMES = new Set(['sunset', 'restaurant', 'city_update', 'tithi']);
 
 // ────────────────────────────────────────────────────────────────────────────
 // Helpers
@@ -131,10 +133,17 @@ export default {
         return new Response('OK', { status: 200 });
       }
 
-      // -- Scale brake: manual throttle switch -------------------------------
+      // -- Scale brakes: parallel KV reads ----------------------------------
+      // All three checks read independent keys — fire together to save ~2 RTTs.
+      const today = new Date().toISOString().slice(0, 10);
+      const [throttled, rlRaw, spendRaw] = await Promise.all([
+        env.KV.get('mode:throttled'),                      // manual kill switch
+        env.KV.get(`ratelimit:${phone}:${today}`),         // per-user daily cap
+        env.KV.get(`spend:${today}`),                      // global spend ceiling
+      ]);
+
       // Flip with: KV put mode:throttled = "1". Existing users keep working;
       // new users get a hold message. Clears instantly on KV delete, no deploy.
-      const throttled = await env.KV.get('mode:throttled');
       if (throttled) {
         const existing = await getUser(phone, env);
         if (!existing) {
@@ -143,21 +152,18 @@ export default {
         }
       }
 
-      // -- Scale brake: per-user daily rate limit (250/day) ------------------
-      const today = new Date().toISOString().slice(0, 10);
-      const rlKey = `ratelimit:${phone}:${today}`;
-      const count = parseInt(await env.KV.get(rlKey) || '0', 10);
-      if (count >= 250) {
+      // -- Per-user daily rate limit -----------------------------------------
+      const count = parseInt(rlRaw || '0', 10);
+      if (count >= 200) {
         await sendMessage(phone, `You've hit today's limit 🙏🏾 Back tomorrow.`, env);
         return new Response('OK', { status: 200 });
       }
-      await env.KV.put(rlKey, String(count + 1), { expirationTtl: 86400 });
+      await env.KV.put(`ratelimit:${phone}:${today}`, String(count + 1), { expirationTtl: 86400 });
 
-      // -- Scale brake: global daily spend ceiling (soft) -------------------
+      // -- Global daily spend ceiling (soft) ---------------------------------
       // KV has no atomic increment, so concurrent requests can undercount.
       // Thresholds are set conservatively; Anthropic billing alert is the real backstop.
-      const spendDay = new Date().toISOString().slice(0, 10);
-      const spend = parseFloat(await env.KV.get(`spend:${spendDay}`) || '0');
+      const spend = parseFloat(spendRaw || '0');
       if (spend >= 8) {
         if (messageType === 'image') {
           await sendMessage(phone, `We're at capacity for image scans today 🙏🏾 Text questions still work.`, env);
@@ -318,6 +324,19 @@ export default {
         return new Response('OK', { status: 200 });
       }
 
+      // -- "details" keyword — strictness level explainer --------------------
+      // Only fires when the strictness question is currently pending.
+      // Any other context falls through to normal routing.
+      if (messageType === 'text' && text.trim().toLowerCase() === 'details') {
+        const detailsPending = readPending(user.pending_action);
+        if (detailsPending?.need === 'strictness') {
+          await sendMessage(phone, getStrictnessDetails(user.community) + '\n\n' + getStrictnessQuestion(), env);
+          const rec = serializePending({ need: 'strictness', intent: { journey: 'food', params: {} } });
+          if (rec) await updateUser(phone, { pending_action: rec }, env);
+          return new Response('OK', { status: 200 });
+        }
+      }
+
       // -- Bare greeting → show welcome --------------------------------------
       if (messageType === 'text' && isBareGreeting(text)) {
         await sendMessage(phone, getWelcomeMessage(), env);
@@ -334,7 +353,6 @@ export default {
           const locPending = readPending(user.pending_action);
           const pendingJourney = locPending?.intent?.journey;
           const isCityPending = locPending && (locPending.need === 'city' || locPending.need === 'city_pick');
-          const CITY_JOURNEY_NAMES = new Set(['sunset', 'restaurant', 'city_update', 'tithi']);
           const journeyName = (isCityPending && CITY_JOURNEY_NAMES.has(pendingJourney))
             ? pendingJourney
             : 'city_update';
@@ -391,26 +409,22 @@ export default {
           /^(yes|yea|yeah|yep|sure|ok|okay|please|sounds good)\b/i.test(trimmed) &&
           trimmed.length < maxLen;
 
-        // -- Food followup: Claude ended with a question, user replied vaguely --
+        // -- Food followup: Claude ended with a question or numbered menu --------
+        // Clear pending and fall through — Claude sees its own question/menu in
+        // history and responds naturally. Track that we cleared it so the
+        // orphaned-bare-number guard below doesn't intercept a numbered menu reply.
+        let hadFoodFollowup = false;
         if (pending?.need === 'food_followup') {
-          if (isShortAffirmative(25)) {
-            await updateUser(phone, { pending_action: null }, env);
-            await sendMessage(phone, `What would you like to know? 🙏🏾`, env);
-            return new Response('OK', { status: 200 });
-          }
           await updateUser(phone, { pending_action: null }, env);
           user.pending_action = null;
+          hadFoodFollowup = true;
         }
 
-        // -- Tithi food followup: user got upcoming list, replied vaguely ------
+        // -- Tithi food followup: user replied after a tithi response ended with a question --
         if (pending?.need === 'tithi_food_followup') {
-          if (isShortAffirmative(25)) {
-            await updateUser(phone, { pending_action: null }, env);
-            await sendMessage(phone, `Sure! Are you asking about *pachkhan* for a specific day, or want to know *what you can eat* on one of those tithis? 🙏🏾`, env);
-            return new Response('OK', { status: 200 });
-          }
           await updateUser(phone, { pending_action: null }, env);
           user.pending_action = null;
+          hadFoodFollowup = true;
         }
 
         // -- Tithi followup: user said "yes" after sunset offered a fast check --
@@ -560,8 +574,9 @@ export default {
         // -- Orphaned bare number ---------------------------------------------
         // User typed "1", "2", etc. but no pending matched (e.g. picker expired
         // after a long gap). Sending to Claude gives a confusing generic reply.
-        // Ask them to re-state instead.
-        if (/^[1-9]$/.test(text.trim()) && messageType === 'text') {
+        // Exception: skip if food_followup was just cleared — the number is a
+        // valid reply to a numbered menu Claude generated last turn.
+        if (/^[1-9]$/.test(text.trim()) && messageType === 'text' && !hadFoodFollowup) {
           await sendMessage(phone, `What would you like help with? 🙏🏾`, env);
           return new Response('OK', { status: 200 });
         }

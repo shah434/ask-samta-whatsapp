@@ -6,7 +6,7 @@
 // maxTokens defaults to 250 (tight, for 3-line verdicts). Journeys that
 // genuinely need a longer answer — e.g. restaurant lists — pass a higher
 // value explicitly. This keeps brevity the default everywhere else.
-export async function callClaude(messages, system, env, maxTokens = 250) {
+export async function callClaude(messages, system, env, maxTokens = 250, ctx = null) {
   try {
     const res = await fetch(
       'https://api.anthropic.com/v1/messages',
@@ -38,21 +38,25 @@ export async function callClaude(messages, system, env, maxTokens = 250) {
       return 'Sorry I could not process that right now. Please try again.';
     }
 
-    // Accumulate approx daily cost (soft brake; provider alert is the real backstop)
-    try {
-      const u = data.usage;
-      if (u && env.KV) {
-        const cost = (u.input_tokens || 0) / 1e6 * 1
-                   + (u.cache_creation_input_tokens || 0) / 1e6 * 1.25
-                   + (u.cache_read_input_tokens || 0) / 1e6 * 0.10
-                   + (u.output_tokens || 0) / 1e6 * 5;
-        console.log(`[cost] in=${u.input_tokens} cache_w=${u.cache_creation_input_tokens||0} cache_r=${u.cache_read_input_tokens||0} out=${u.output_tokens}`);
-        const day = new Date().toISOString().slice(0, 10);
-        const key = `spend:${day}`;
-        const cur = parseFloat(await env.KV.get(key) || '0');
-        await env.KV.put(key, String(cur + cost), { expirationTtl: 172800 });
-      }
-    } catch {}
+    // Accumulate approx daily cost off the critical path — deferred via ctx.waitUntil
+    // when available, otherwise fire-and-forget (Worker stays alive for the main response).
+    const spendUpdate = (async () => {
+      try {
+        const u = data.usage;
+        if (u && env.KV) {
+          const cost = (u.input_tokens || 0) / 1e6 * 1
+                     + (u.cache_creation_input_tokens || 0) / 1e6 * 1.25
+                     + (u.cache_read_input_tokens || 0) / 1e6 * 0.10
+                     + (u.output_tokens || 0) / 1e6 * 5;
+          console.log(`[cost] in=${u.input_tokens} cache_w=${u.cache_creation_input_tokens||0} cache_r=${u.cache_read_input_tokens||0} out=${u.output_tokens}`);
+          const key = `spend:${new Date().toISOString().slice(0, 10)}`;
+          const cur = parseFloat(await env.KV.get(key) || '0');
+          await env.KV.put(key, String(cur + cost), { expirationTtl: 172800 });
+        }
+      } catch {}
+    })();
+    if (ctx) ctx.waitUntil(spendUpdate);
+
     return data.content[0].text;
 
   } catch (err) {

@@ -52,6 +52,10 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
   let productName = null;
   let response; // set here for image branch A; set after the block for B and text
 
+  // Built once and reused across all paths. Branch B reassigns after search
+  // results are available; text path uses this directly.
+  let system = buildSystemPrompt(user, calendarData, '', null);
+
   if (messageType === 'image') {
     try {
       const { base64, mimeType } = await imagePromise;
@@ -63,10 +67,9 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
       // front) returns "PRODUCT: <name>" and we fall through to a Brave search
       // followed by a second Claude call with the text-only search snippets.
       const identifyPrompt = text
-        ? `${text}\n\nIf the full ingredient list is NOT visible in this image, reply with: PRODUCT: [full product name and brand]`
-        : 'If the full ingredient list is visible in this image, scan it and assess each ingredient for my diet. If only the product front is visible (no ingredient list), reply with: PRODUCT: [full product name and brand]';
+        ? `${text}\n\nIMPORTANT: If the full ingredient list is NOT visible in this image, your ENTIRE reply must be exactly this format and nothing else:\nPRODUCT: [full product name and brand]\nDo NOT explain. Do NOT ask questions. Do NOT say anything else.`
+        : `If the full ingredient list is visible in this image, scan it and assess each ingredient for my diet.\n\nIMPORTANT: If only the product front is visible (no ingredient list), your ENTIRE reply must be exactly:\nPRODUCT: [full product name and brand]\nNothing else — no explanation, no questions, just that one line.`;
 
-      const systemA = buildSystemPrompt(user, calendarData, '', null);
       console.log(`[perf] claude_start=${Date.now() - t0}ms`);
       const firstReply = await callClaude([{
         role: 'user',
@@ -74,13 +77,45 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
           { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
           { type: 'text', text: identifyPrompt }
         ]
-      }], systemA, env, 400);
+      }], system, env, 400, ctx);
       console.log(`[perf] claude_done=${Date.now() - t0}ms`);
 
-      if (firstReply.trim().toUpperCase().startsWith('PRODUCT:')) {
+      // Fallback: Claude sometimes ignores the PRODUCT: format and writes a
+      // conversational response instead. If it mentions it can't read the ingredient
+      // list but named the product, extract the name and continue as Branch B.
+      let resolvedFirstReply = firstReply;
+      const cantReadIngredients = /back (panel|label|photo)|ingredient[^.]*not.*(?:visible|readable|clear)|can'?t (?:see|read).*ingredient|send.*(?:back|clearer)|clearer (?:image|photo)/i.test(firstReply);
+      if (cantReadIngredients && !firstReply.trim().toUpperCase().startsWith('PRODUCT:')) {
+        const nameMatch = firstReply.match(/(?:this is (?:a )?|it'?s (?:a )?|see (?:this is (?:a )?)?|recognize[^a-z]*(?:as (?:a )?)?)([A-Z][A-Za-z0-9®™\s'-]{4,80})/);
+        if (nameMatch) {
+          resolvedFirstReply = `PRODUCT: ${nameMatch[1].trim()}`;
+          console.log(`[image] format_fallback extracted="${nameMatch[1].trim()}"`);
+        } else {
+          // Regex couldn't extract the name from the conversational response.
+          // Make a focused second call — just identify the product, nothing else.
+          console.log(`[image] name_extract_retry latency=${Date.now() - t0}ms`);
+          const retryReply = await callClaude([{
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
+              { type: 'text', text: 'What product is shown in this image? Reply in exactly this format and nothing else:\nPRODUCT: [full product name and brand]' }
+            ]
+          }], system, env, 30, ctx);
+          if (retryReply.trim().toUpperCase().startsWith('PRODUCT:')) {
+            resolvedFirstReply = retryReply.trim();
+            console.log(`[image] name_extract_retry success="${retryReply.trim()}"`);
+          } else {
+            console.log(`[image] name_extract_retry failed response="${retryReply.trim()}" latency=${Date.now() - t0}ms`);
+            await sendMessage(phone, `I can see the front of the package but not the ingredient list. Can you send a photo of the back label? 🙏🏾`, env);
+            return true;
+          }
+        }
+      }
+
+      if (resolvedFirstReply.trim().toUpperCase().startsWith('PRODUCT:')) {
         // Branch B: product front — search for ingredients then call Claude again
         scanBranch = 'B';
-        productName = firstReply.trim().slice(8).trim() || null;
+        productName = resolvedFirstReply.trim().slice(8).trim() || null;
         console.log(`[image] branch=B product="${productName}" latency=${Date.now() - t0}ms`);
 
         const snippets = productName ? await searchProductIngredients(productName, env) : null;
@@ -95,6 +130,7 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
           `User sent a photo of the product front (no ingredient list visible).\n` +
           `Web snippets retrieved to identify ingredients:\n\n${snippets}\n\n` +
           `Use these to identify likely ingredients. If no clear ingredient list, ask for the back label. Do not invent ingredients.`;
+        system = buildSystemPrompt(user, calendarData, '', searchSnippets);
         claudeMessages = [{
           role: 'user',
           content: text || `Please check if ${productName} is safe for my diet based on the search results provided.`
@@ -117,9 +153,8 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
 
   // -- Second Claude call for branch B and all text messages -----------------
   if (!response) {
-    const system = buildSystemPrompt(user, calendarData, '', searchSnippets);
     console.log(`[perf] claude_start=${Date.now() - t0}ms`);
-    response = await callClaude(claudeMessages, system, env, 250);
+    response = await callClaude(claudeMessages, system, env, 250, ctx);
     console.log(`[perf] claude_done=${Date.now() - t0}ms`);
   }
 
@@ -127,6 +162,41 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
     .replace(/TODAY_IS_TITHI:\s*(true|false)/gi, '')
     .replace(/TODAY_TITHI_NAME:.*$/gim, '')
     .trim();
+
+  // -- Verdict correction -------------------------------------------------------
+  // Runs only when strictness is set (we know the user's actual level).
+  if (user.strictness) {
+    const lvl = user.strictness; // 'strict' | 'moderate' | 'flexible'
+
+    // Case 1: Claude self-corrected — wrote ✋ NOT SAFE but closing line confirms it's safe.
+    // Flip verdict, fix all ✗ ingredient lines, strip the correction paragraph.
+    const hasNotSafeVerdict = /^✋\s*NOT SAFE/i.test(cleanResponse.trimStart());
+    const selfCorrectionLine = /\n[^\n]*\b(?:safe for you overall|this is safe for you|are allowed[^.]*safe)\b[^\n]*$/i;
+    if (hasNotSafeVerdict && selfCorrectionLine.test(cleanResponse)) {
+      cleanResponse = cleanResponse
+        .replace(/✋\s*NOT SAFE/, '✅ SAFE')
+        .replace(/^✗([^\n]*)/gm, '✓$1')
+        .replace(selfCorrectionLine, '')
+        .trim();
+      cleanResponse += '\nAll good 🙏🏾';
+      console.log(`[verdict] self_correction detected, corrected not_safe→safe strictness=${lvl}`);
+    }
+
+    // Case 2: Claude pre-decided ✅ SAFE but correctly flagged an ingredient below.
+    const hasSafeVerdict = /^✅\s*SAFE/i.test(cleanResponse.trimStart());
+    const hasFlaggedIngredient =
+      /^✗/m.test(cleanResponse) ||
+      new RegExp(`not permitted at ${lvl}`, 'i').test(cleanResponse) ||
+      new RegExp(`at ${lvl}[^.]*not be permitted`, 'i').test(cleanResponse) ||
+      new RegExp(`at ${lvl}[^.]*not safe`, 'i').test(cleanResponse) ||
+      new RegExp(`at ${lvl}[^.]*would not`, 'i').test(cleanResponse) ||
+      /i.?d skip this/i.test(cleanResponse);
+    if (hasSafeVerdict && hasFlaggedIngredient) {
+      cleanResponse = cleanResponse.replace(/✅\s*SAFE/, '✋ NOT SAFE');
+      console.log(`[verdict] corrected safe→not_safe strictness=${lvl}`);
+    }
+  }
+
 
   // -- Scan log (image only) --------------------------------------------------
   if (messageType === 'image' && scanBranch) {
@@ -173,7 +243,6 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
   const setPendingThisTurn = needsStrictnessAsk || proactiveStrictnessAsk;
   if (setPendingThisTurn) {
     cleanResponse += '\n\n' + getStrictnessQuestion();
-    cleanResponse += '\n\n💡 Type *help* anytime to see what else I can do.';
     const rec = serializePending({ need: 'strictness', intent });
     if (rec) await updateUser(phone, { pending_action: rec }, env);
   }
@@ -183,10 +252,12 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
   await sendMessage(phone, tithiFact + cleanResponse, env);
 
   // -- Food follow-up pending ------------------------------------------------
-  // If Claude ended with a question and no other pending was set this turn,
-  // store a food_followup so a short reply ("sure", "yes") doesn't fall into
-  // a dead-end food classify with no context.
-  if (!setPendingThisTurn && cleanResponse.trimEnd().endsWith('?')) {
+  // Set when Claude ended with a question OR generated a numbered menu.
+  // Numbered menus (e.g. "1 — X\n2 — Y") need the same pending so the user's
+  // "2" reply falls through to Claude (which sees the menu in history) instead
+  // of hitting the orphaned-bare-number trap.
+  const hasNumberedMenu = /^[1-9]\s*[—–-]/m.test(cleanResponse);
+  if (!setPendingThisTurn && (cleanResponse.trimEnd().endsWith('?') || hasNumberedMenu)) {
     const rec = serializePending({ need: 'food_followup', intent });
     if (rec) await updateUser(phone, { pending_action: rec }, env);
   }

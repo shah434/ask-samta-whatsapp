@@ -35,7 +35,7 @@ export async function handleProfileUpdate(phone, text, user, intent, env) {
     || (pending?.need === 'strictness' ? parseStrictnessInput(text) : null);
   if (strictness) {
     await updateUser(phone, { strictness, pending_action: null }, env);
-    await sendMessage(phone, `Got it 🙏🏾 set you to ${strictness}. Ask me anything!`, env);
+    await sendMessage(phone, `Got it 🙏🏾 set you to ${strictness}.\n\nTo change it later, just send *change my strictness to strict*, *moderate*, or *flexible*.`, env);
     return true;
   }
 
