@@ -237,8 +237,11 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
 
   const needsStrictnessAsk =
     baseGuard && isStrictnessSensitive && levelsShown > 1;          // Trigger A
+  // Trigger B only fires when the current message is an actual food query.
+  // Without this guard it fires on "no", "delete my account", greetings, etc.
+  const hasFoodSignal = !!(intent.params?.food_text || intent.params?.has_image || isStrictnessSensitive);
   const proactiveStrictnessAsk =
-    baseGuard && (user.message_count || 0) >= 3 && !needsStrictnessAsk; // Trigger B
+    baseGuard && hasFoodSignal && (user.message_count || 0) >= 3 && !needsStrictnessAsk; // Trigger B
 
   const setPendingThisTurn = needsStrictnessAsk || proactiveStrictnessAsk;
   if (setPendingThisTurn) {

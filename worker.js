@@ -688,14 +688,15 @@ export default {
           user.pending_action = null;
         }
 
-        // -- Orphaned bare affirmative ----------------------------------------
-        // "yes", "ok", etc. with no pending context would reach Claude, which
-        // can hallucinate a confirmation for whatever was last in history (e.g.
-        // re-confirming a reminder that was just cancelled). Short affirmatives
-        // have no meaning without pending context — intercept here.
+        // -- Orphaned bare affirmative / negative --------------------------------
+        // "yes", "ok", "no", etc. with no pending context would reach Claude,
+        // which can hallucinate a reply using stale history (e.g. re-echoing a
+        // strictness question or re-confirming a cancelled reminder).
         // Exception: hadFoodFollowup = true means Claude asked a question last
-        // turn; the "yes" is a valid reply to that question.
-        if (isShortAffirmative(20) && !hadFoodFollowup && messageType === 'text') {
+        // turn; the reply is a valid continuation of that conversation.
+        const isShortNegative = (maxLen) =>
+          /^(no|nope|nah|never|not now|not yet)\b/i.test(trimmed) && trimmed.length < maxLen;
+        if ((isShortAffirmative(20) || isShortNegative(20)) && !hadFoodFollowup && messageType === 'text') {
           await sendMessage(phone, `What can I help you with? 🙏🏾`, env);
           return new Response('OK', { status: 200 });
         }
