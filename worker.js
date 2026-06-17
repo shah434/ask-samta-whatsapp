@@ -15,7 +15,7 @@ import { getUser, createUser, updateUser, deleteUser, fetchPendingAction, fetchP
 import { routeFallback } from './src/route-fallback.js';
 import { sendMessage, sendReaction, sendImage, getImageAsBase64 } from './src/whatsapp.js';
 import { handleRebuildFood } from './src/rebuild-food.js';
-import { commitReminder, clearReminders, activeReminders, cancelSummary, confirmText, dispatchDueReminders } from './src/reminders.js';
+import { commitReminder, clearReminders, activeReminders, cancelSummary, confirmText, dispatchDueReminders, listRemindersText } from './src/reminders.js';
 import { DEFAULT_DIET, getWelcomeMessage, getStrictnessDetails, getStrictnessQuestion } from './src/onboarding.js';
 import { getCalendarCached, getTodayAndUpcomingEvents } from './src/calendar.js';
 // ────────────────────────────────────────────────────────────────────────────
@@ -365,6 +365,12 @@ export default {
         return new Response('OK', { status: 200 });
       }
 
+      // -- bare "delete" — disambiguate reminders vs account deletion ----------
+      if (messageType === 'text' && text.trim().toLowerCase() === 'delete') {
+        await sendMessage(phone, `Did you mean to cancel your reminders, or delete your account?\n\n• Reply *cancel* to remove your reminders\n• Reply *delete me* to delete your account 🙏🏾`, env);
+        return new Response('OK', { status: 200 });
+      }
+
       // -- "delete me" keyword -----------------------------------------------
       if (messageType === 'text' && text.trim().toLowerCase() === 'delete me') {
         const rec = serializePending({ need: 'delete_confirm', intent: { journey: 'food', params: {} } });
@@ -386,10 +392,10 @@ export default {
       }
 
       // -- "cancel" keyword — clear all scheduled reminders ------------------
-      // Caught before routing so it never collides with a journey. Reads the
-      // queue fresh from Supabase (not KV) so it reliably sees a just-set
-      // reminder, and names what it cancels.
-      if (messageType === 'text' && text.trim().toLowerCase() === 'cancel') {
+      // Catches "cancel", "cancel reminders", "cancel my reminders".
+      // Reads fresh from Supabase so it reliably sees a just-set reminder.
+      const cancelNorm = text.trim().toLowerCase();
+      if (messageType === 'text' && (cancelNorm === 'cancel' || /^cancel (my |all |all my )?reminders?$/.test(cancelNorm))) {
         const active = await activeReminders(phone, env);
         await clearReminders(phone, user, env);
         // Also clear any pending reminder_confirm so a stray "yes" can't
@@ -402,6 +408,13 @@ export default {
         await sendMessage(phone, active.length
           ? `✅ Done — I've cancelled your ${cancelSummary(active)}.`
           : `You don't have any reminders set right now 🙏🏾`, env);
+        return new Response('OK', { status: 200 });
+      }
+
+      // -- "my reminders" keyword — list all active reminders ----------------
+      if (messageType === 'text' && /^(my reminders?|reminders?|(list|show|check)( all| my| all my)? reminders?|(give|tell) me( all| my| all my)? reminders?|what( are)? (all )?my reminders?)\??$/i.test(text.trim())) {
+        const active = await activeReminders(phone, env);
+        await sendMessage(phone, listRemindersText(active), env);
         return new Response('OK', { status: 200 });
       }
 
@@ -479,6 +492,16 @@ export default {
         if (profileUpdateClaims(user, rbIntent, text)) {
           const handled = await handleProfileUpdate(phone, text, user, rbIntent, env);
           if (handled) return new Response('OK', { status: 200 });
+        }
+
+        // -- Account deletion: "delete my account", "remove me", "opt out" etc.
+        // Classify sets journey='account' for these phrases. Handle here so
+        // they never reach handleRebuildFood (which would append strictness ask).
+        if (rbIntent.journey === 'account') {
+          const rec = serializePending({ need: 'delete_confirm', intent: { journey: 'food', params: {} } });
+          await updateUser(phone, { pending_action: rec }, env);
+          await sendMessage(phone, `I need you to confirm. Reply with exactly:\n\n*delete me*\n\n(all lowercase, just those two words)\n\nThis will permanently remove your account and all saved data. 🙏🏾`, env);
+          return new Response('OK', { status: 200 });
         }
 
         // Parse pending once — used by all followup handlers below.
