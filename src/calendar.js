@@ -161,6 +161,16 @@ UPCOMING (informational only, NOT today): none`;
 TODAY_TITHI_NAME: ${todayEvent.summary}`
     : `TODAY_IS_TITHI: false`;
 
+  // Tomorrow line — lets Claude answer "what tithi is it tomorrow" without
+  // guessing or outputting UPCOMING events for a different date.
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrowStr = tomorrow.toDateString();
+  const tomorrowEvent = events.find(e => e.date.toDateString() === tomorrowStr);
+  const tomorrowLine = tomorrowEvent
+    ? `TOMORROW_IS_TITHI: true\nTOMORROW_TITHI_NAME: ${tomorrowEvent.summary}`
+    : `TOMORROW_IS_TITHI: false`;
+
   // Split upcoming into this-week (today+1 through today+6) vs later.
   // Do this in code so Claude never has to count dates itself.
   const cutoff = new Date(today);
@@ -195,6 +205,7 @@ TODAY_TITHI_NAME: ${todayEvent.summary}`
   const laterLines    = later.length    ? later.map(fmtEvent).join('\n')    : 'none';
 
   return `${todayLine}
+${tomorrowLine}
 UPCOMING_SUMMARY: ${upcomingSummary}
 UPCOMING_THIS_WEEK (within 7 days, NOT today):
 ${thisWeekLines}

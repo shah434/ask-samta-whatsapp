@@ -43,6 +43,8 @@ async function answerTithi(phone, user, place, intent, env) {
   response = response
     .replace(/TODAY_IS_TITHI:\s*(true|false)/gi, '')
     .replace(/TODAY_TITHI_NAME:.*$/gim, '')
+    .replace(/TOMORROW_IS_TITHI:\s*(true|false)/gi, '')
+    .replace(/TOMORROW_TITHI_NAME:.*$/gim, '')
     .trim();
 
   // Guard: prevent hallucinated tithi claims
@@ -53,9 +55,11 @@ async function answerTithi(phone, user, place, intent, env) {
       || "Let me know what you'd like to check 🙏🏾";
   }
 
-  // Prepend tithi fact if today is a tithi
+  // Prepend "Today is X" fact only when the user asked about TODAY.
+  // For "tomorrow" questions this would be misleading — skip it.
+  const askingAboutTomorrow = /\btomorrow\b/i.test(question);
   const m = calendarData.match(/TODAY_IS_TITHI:\s*true[\s\S]*?TODAY_TITHI_NAME:\s*(.+)/i);
-  const tithiFact = m ? `Today is ${m[1].trim()} 🙏🏾\n\n` : '';
+  const tithiFact = (!askingAboutTomorrow && m) ? `Today is ${m[1].trim()} 🙏🏾\n\n` : '';
 
   await sendMessage(phone, tithiFact + response, env);
 

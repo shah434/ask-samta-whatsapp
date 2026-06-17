@@ -392,6 +392,13 @@ export default {
       if (messageType === 'text' && text.trim().toLowerCase() === 'cancel') {
         const active = await activeReminders(phone, env);
         await clearReminders(phone, user, env);
+        // Also clear any pending reminder_confirm so a stray "yes" can't
+        // re-add the just-cancelled reminder on the next message.
+        const pendingForCancel = readPending(user.pending_action);
+        if (pendingForCancel?.need === 'reminder_confirm') {
+          await updateUser(phone, { pending_action: null }, env);
+          user.pending_action = null;
+        }
         await sendMessage(phone, active.length
           ? `✅ Done — I've cancelled your ${cancelSummary(active)}.`
           : `You don't have any reminders set right now 🙏🏾`, env);
