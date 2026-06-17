@@ -177,6 +177,52 @@ export async function createUser(phone, fields, env) {
   return user;
 }
 
+// Users with a non-empty reminder queue. Filtering the actual due/unsent items
+// happens in JS (PostgREST can't index into the JSONB array cheaply). At small
+// scale a select over the few rows with reminders is fine; add the gin index in
+// migration 001 once the row count grows.
+export async function fetchUsersWithDueReminders(env) {
+  try {
+    const url = `${env.SUPABASE_URL}/rest/v1/users?scheduled_reminders=neq.${encodeURIComponent('[]')}&select=phone_number,scheduled_reminders,last_message_at`;
+    const res = await fetch(url, {
+      headers: {
+        apikey: env.SUPABASE_KEY,
+        Authorization: `Bearer ${env.SUPABASE_KEY}`,
+      },
+    });
+    if (!res.ok) {
+      console.log(`[db] fetchUsersWithDueReminders http_error status=${res.status}`);
+      return [];
+    }
+    return await res.json();
+  } catch (err) {
+    console.log(`[db] fetchUsersWithDueReminders error=${err.message}`);
+    return [];
+  }
+}
+
+// Read a user's reminder queue FRESH from Supabase (source of truth), bypassing
+// KV. Used by cancel + commit so a stale cross-PoP KV copy can't make us miss
+// or clobber a just-set reminder. Returns [] on any miss/error.
+export async function fetchScheduledReminders(phone, env) {
+  try {
+    const res = await fetch(
+      `${env.SUPABASE_URL}/rest/v1/users?phone_number=eq.${encodeURIComponent(phone)}&select=scheduled_reminders&limit=1`,
+      { headers: { apikey: env.SUPABASE_KEY, Authorization: `Bearer ${env.SUPABASE_KEY}` } }
+    );
+    if (!res.ok) {
+      console.log(`[db] fetchScheduledReminders http_error status=${res.status}`);
+      return [];
+    }
+    const rows = await res.json();
+    const arr = rows?.[0]?.scheduled_reminders;
+    return Array.isArray(arr) ? arr : [];
+  } catch (err) {
+    console.log(`[db] fetchScheduledReminders error=${err.message}`);
+    return [];
+  }
+}
+
 export async function deleteUser(phone, env) {
   // 1. Supabase first — hard delete the row
   const res = await fetch(

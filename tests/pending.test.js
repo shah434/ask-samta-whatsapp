@@ -47,6 +47,28 @@ describe('pending — round trip', () => {
     expect(back.choices[0].name).toBe('London');
   });
 
+  it('reminder_confirm round-trips WITH the reminder payload', () => {
+    const reminder = {
+      type: 'sunset', day: 'today',
+      send_at: '2026-06-16T23:30:00.000Z',
+      sun_time: '2026-06-17T00:30:00.000Z',
+      display: '08:30 PM', city: 'New York, NY, USA',
+    };
+    const stored = serializePending({ need: 'reminder_confirm', intent: intent('sunset'), reminder });
+    expect(stored).not.toBeNull();
+    const back = readPending(stored);
+    expect(back.need).toBe('reminder_confirm');
+    expect(back.reminder.type).toBe('sunset');
+    expect(back.reminder.send_at).toBe('2026-06-16T23:30:00.000Z');
+    expect(back.reminder.display).toBe('08:30 PM');
+  });
+
+  it('refuses reminder_confirm without a valid reminder', () => {
+    expect(serializePending({ need: 'reminder_confirm', intent: intent('sunset') })).toBeNull();
+    expect(serializePending({ need: 'reminder_confirm', intent: intent('sunset'), reminder: { type: 'noon' } })).toBeNull();
+    expect(serializePending({ need: 'reminder_confirm', intent: intent('sunset'), reminder: { type: 'sunset', send_at: 'nope', sun_time: 'x', display: 'y', city: 'z' } })).toBeNull();
+  });
+
   it('preserves intent params through the round trip', () => {
     const stored = serializePending({
       need: 'city',

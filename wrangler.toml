@@ -3,7 +3,10 @@ main = "worker.js"
 compatibility_date = "2024-01-01"
 
 [triggers]
-crons = ["0 0 * * *"]  # midnight UTC = 5:30am IST — pre-warms calendar cache before first users of the day
+# "0 0 * * *"   midnight UTC = 5:30am IST — pre-warms calendar cache for the day
+# "*/15 * * * *" every 15 min — dispatches due sunset/sunrise reminders
+# worker.js scheduled() branches on event.cron to pick the job.
+crons = ["0 0 * * *", "*/15 * * * *"]
 
 [[kv_namespaces]]
 binding = "KV"

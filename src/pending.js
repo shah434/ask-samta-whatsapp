@@ -34,12 +34,12 @@ const ALLOWED_JOURNEYS = new Set([
 ]);
 
 // The fields a journey can be waiting on.
-const ALLOWED_NEEDS = new Set(['city', 'strictness', 'city_pick', 'fast_pick', 'tithi_followup', 'tithi_food_followup', 'food_followup', 'upvas_pick', 'delete_confirm']);
+const ALLOWED_NEEDS = new Set(['city', 'strictness', 'city_pick', 'fast_pick', 'tithi_followup', 'tithi_food_followup', 'food_followup', 'upvas_pick', 'delete_confirm', 'reminder_confirm']);
 // ── Serialize ───────────────────────────────────────────────────────────────
 // Build the JSON string to store in users.pending_action.
 // Returns null if the input is structurally invalid — callers should treat a
 // null return as "don't set a pending record" rather than storing garbage.
-export function serializePending({ need, intent, choices }) {
+export function serializePending({ need, intent, choices, reminder }) {
   if (!ALLOWED_NEEDS.has(need)) {
     console.log(`[pending] refuse_serialize bad_need=${need}`);
     return null;
@@ -54,9 +54,14 @@ export function serializePending({ need, intent, choices }) {
       return null;
     }
   }
+  if (need === 'reminder_confirm' && !isValidReminder(reminder)) {
+    console.log(`[pending] refuse_serialize reminder_confirm_without_reminder`);
+    return null;
+  }
 
   const record = { need, intent, created_at: Date.now() };
   if (need === 'city_pick') record.choices = choices;
+  if (need === 'reminder_confirm') record.reminder = reminder;
 
   try {
     return JSON.stringify(record);
@@ -101,9 +106,14 @@ export function readPending(storedValue) {
       return null;
     }
   }
+  if (parsed.need === 'reminder_confirm' && !isValidReminder(parsed.reminder)) {
+    console.log(`[pending] event=corrupt reason=reminder_confirm_without_reminder`);
+    return null;
+  }
 
   const clean = { need: parsed.need, intent: parsed.intent };
   if (parsed.need === 'city_pick') clean.choices = parsed.choices;
+  if (parsed.need === 'reminder_confirm') clean.reminder = parsed.reminder;
 
   // Expire stale records so ghost pending can't intercept unrelated messages.
   const TTL_MS = {
@@ -113,6 +123,7 @@ export function readPending(storedValue) {
     tithi_followup:      30 * 60 * 1000,
     tithi_food_followup: 30 * 60 * 1000,
     food_followup:       30 * 60 * 1000,
+    reminder_confirm:    30 * 60 * 1000,         // 30 min — a "yes" must be prompt
     strictness:          7 * 24 * 60 * 60 * 1000, // 7 days
     city:                7 * 24 * 60 * 60 * 1000,
     city_pick:           7 * 24 * 60 * 60 * 1000,
@@ -135,5 +146,20 @@ function isValidIntent(intent) {
   if (!intent || typeof intent !== 'object') return false;
   if (!ALLOWED_JOURNEYS.has(intent.journey)) return false;
   if (intent.params != null && typeof intent.params !== 'object') return false;
+  return true;
+}
+
+// A reminder offer stashed for the user to confirm with "yes". Shallow check:
+// the cron sends these fields verbatim, so they must be present and the right
+// primitive types — but we don't re-derive the times here (that's the
+// scheduler's job, already done before serialize).
+const REMINDER_TYPES = new Set(['sunset', 'sunrise']);
+function isValidReminder(r) {
+  if (!r || typeof r !== 'object') return false;
+  if (!REMINDER_TYPES.has(r.type)) return false;
+  if (typeof r.send_at !== 'string' || Number.isNaN(Date.parse(r.send_at))) return false;
+  if (typeof r.sun_time !== 'string' || Number.isNaN(Date.parse(r.sun_time))) return false;
+  if (typeof r.display !== 'string' || !r.display) return false;
+  if (typeof r.city !== 'string' || !r.city) return false;
   return true;
 }

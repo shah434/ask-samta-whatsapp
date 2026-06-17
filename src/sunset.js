@@ -10,20 +10,36 @@ import { fetchWithTimeout } from './utils.js';
  * Fetch sunrise/sunset for an already-resolved place object.
  * Returns { city, sunrise, sunset, timezoneId } or null on failure.
  */
-export async function getSunForPlace(place, date = null) {
+export async function getSunForPlace(place, date = null, env = null) {
   try {
-    let dateStr;
-    if (date === 'tomorrow') {
-      const d = new Date();
-      d.setDate(d.getDate() + 1);
-      dateStr = d.toISOString().split('T')[0];
-    } else {
-      dateStr = new Date().toISOString().split('T')[0];
+    // Date must be the USER'S LOCAL date, not UTC. Using UTC shifts "today"/
+    // "tomorrow" forward a day in the evening (e.g. after ~8 PM ET the UTC clock
+    // has already rolled over) — which both mislabels the answer and breaks
+    // reminder gating. Resolve the local calendar date in the place's timezone.
+    const dateStr = localDateStr(place.timezone, date === 'tomorrow' ? 1 : 0);
+
+    // KV cache — sun times are deterministic per location+date, cache for 24h.
+    // The "v2" version tag invalidates pre-existing entries that were cached
+    // before sunriseISO/sunsetISO were added — old entries lack those fields,
+    // which would silently break reminder scheduling until they expired.
+    const cacheKey = `sun:v2:${Number(place.latitude).toFixed(4)}:${Number(place.longitude).toFixed(4)}:${dateStr}`;
+    if (env?.KV) {
+      const cached = await env.KV.get(cacheKey, 'json');
+      if (cached) {
+        console.log(`[sun] kv_hit name=${place.name} date=${dateStr}`);
+        return cached;
+      }
     }
+
     const sunUrl = `https://api.sunrise-sunset.org/json?lat=${place.latitude}&lng=${place.longitude}&date=${dateStr}&formatted=0`;
     console.log(`[sun] lookup name=${place.name} lat=${place.latitude} lng=${place.longitude} tz=${place.timezone} date=${dateStr}`);
 
-    const sunRes = await fetchWithTimeout(sunUrl, {}, 3000);
+    let sunRes = await fetchWithTimeout(sunUrl, {}, 3000);
+    if (sunRes.status === 429) {
+      console.log(`[sun] rate_limited, retrying`);
+      await new Promise(r => setTimeout(r, 1000));
+      sunRes = await fetchWithTimeout(sunUrl, {}, 3000);
+    }
     if (!sunRes.ok) {
       console.log(`[sun] http_error status=${sunRes.status}`);
       return null;
@@ -48,14 +64,27 @@ export async function getSunForPlace(place, date = null) {
       ? `${place.name}${place.admin1 ? ', ' + place.admin1 : ''}${place.country ? ', ' + place.country : ''}`
       : place.name;
 
-    return {
+    const result = {
       city: displayCity,
       sunrise,
       sunset,
+      // Raw UTC ISO timestamps from the API (formatted=0). The display strings
+      // above are for humans/Claude; these are for scheduling math, which must
+      // never parse a localized display string back into a Date. Additive —
+      // existing consumers (formatSunDataForClaude) ignore these fields.
+      sunriseISO: sunData.results.sunrise,
+      sunsetISO: sunData.results.sunset,
       timezoneId: place.timezone,
       date: dateStr,
       isToday: date !== 'tomorrow',
     };
+
+    if (env?.KV) {
+      await env.KV.put(cacheKey, JSON.stringify(result), { expirationTtl: 86400 });
+      console.log(`[sun] kv_set key=${cacheKey}`);
+    }
+
+    return result;
 
   } catch (err) {
     console.log(`[sun] exception: ${err.message}`);
@@ -80,6 +109,14 @@ export function placeFromUser(user) {
     admin1: null,
     country: null
   };
+}
+
+// The calendar date (YYYY-MM-DD) in `timezone`, offset by `offsetDays`.
+// en-CA formats as ISO YYYY-MM-DD. Adding whole days in ms is safe at date
+// granularity (a DST hour never changes which calendar day it lands on here).
+function localDateStr(timezone, offsetDays = 0) {
+  const d = new Date(Date.now() + offsetDays * 86400000);
+  return d.toLocaleDateString('en-CA', { timeZone: timezone || 'UTC' });
 }
 
 function formatTime(utcString, timezoneId) {
