@@ -101,8 +101,8 @@ export async function handleRebuildRestaurant(phone, text, user, intent, env) {
   return handleCityJourney(phone, text, user, intent, env, {
     name: 'restaurant',
     askCityPrompt: isTemple
-      ? `Which city should I search for temples in? 🙏🏾${LOCATION_SHARE_FOR_RESULTS}`
-      : `Which city should I find restaurants in? 🙏🏾${LOCATION_SHARE_FOR_RESULTS}`,
+      ? `Which city should I search for temples in? (e.g. *San Diego, CA*) 🙏🏾${LOCATION_SHARE_FOR_RESULTS}`
+      : `Which city should I find restaurants in? (e.g. *San Diego, CA*) 🙏🏾${LOCATION_SHARE_FOR_RESULTS}`,
     answer: answerRestaurant,
   });
 }

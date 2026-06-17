@@ -79,7 +79,7 @@ export async function handleRebuildTithi(phone, text, user, intent, env) {
 
   return handleCityJourney(phone, text, user, intent, env, {
     name: 'tithi',
-    askCityPrompt: `Which city are you in? I need it to make sure the date is right for your timezone 🙏🏾${LOCATION_SHARE_INVITE}`,
+    askCityPrompt: `Which city and state are you in? (e.g. *San Diego, CA*) — I need it to get the right timezone 🙏🏾${LOCATION_SHARE_INVITE}`,
     answer: answerTithi,
     fallbackToSaved: true, // if city saved, use it without re-asking
   });

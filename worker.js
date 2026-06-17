@@ -15,6 +15,7 @@ import { getUser, createUser, updateUser, deleteUser, fetchPendingAction, fetchP
 import { routeFallback } from './src/route-fallback.js';
 import { sendMessage, sendReaction, sendImage, getImageAsBase64 } from './src/whatsapp.js';
 import { handleRebuildFood } from './src/rebuild-food.js';
+import { commitReminder, clearReminders, activeReminders, cancelSummary, confirmText, dispatchDueReminders } from './src/reminders.js';
 import { DEFAULT_DIET, getWelcomeMessage, getStrictnessDetails, getStrictnessQuestion } from './src/onboarding.js';
 import { getCalendarCached, getTodayAndUpcomingEvents } from './src/calendar.js';
 // ────────────────────────────────────────────────────────────────────────────
@@ -64,12 +65,33 @@ function defaultTimezoneFromPhone(phone) {
 
 export default {
   async scheduled(event, env, ctx) {
+    // Midnight UTC — pre-warm the Jain calendar cache for the day.
+    if (event.cron === '0 0 * * *') {
+      try {
+        const events = await getTodayAndUpcomingEvents();
+        await env.KV.put('jain_calendar_events', JSON.stringify(events), { expirationTtl: 86400 });
+        console.log('Calendar cache pre-warmed:', events.length, 'events');
+      } catch (err) {
+        console.log('Scheduled calendar refresh error:', err.message);
+      }
+      return;
+    }
+
+    // Every 15 min — dispatch due reminders. A short-lived KV lock ensures two
+    // overlapping cron runs never double-process the same queue (the only true
+    // concurrency hazard for the sent-flag read-modify-write).
+    const lock = await env.KV.get('reminder:lock');
+    if (lock) {
+      console.log('[reminder] dispatch skipped — lock held');
+      return;
+    }
+    await env.KV.put('reminder:lock', '1', { expirationTtl: 300 });
     try {
-      const events = await getTodayAndUpcomingEvents();
-      await env.KV.put('jain_calendar_events', JSON.stringify(events), { expirationTtl: 86400 });
-      console.log('Calendar cache pre-warmed:', events.length, 'events');
+      await dispatchDueReminders(env);
     } catch (err) {
-      console.log('Scheduled calendar refresh error:', err.message);
+      console.log('[reminder] dispatch error:', err.message);
+    } finally {
+      try { await env.KV.delete('reminder:lock'); } catch {}
     }
   },
 
@@ -83,6 +105,30 @@ export default {
       if (mode === 'subscribe' && token === env.VERIFY_TOKEN) {
         return new Response(challenge, { status: 200 });
       }
+
+      // TEMPORARY debug trigger — seed a due reminder for `phone` and run the
+      // cron immediately. Guarded by VERIFY_TOKEN. REMOVE after testing.
+      // GET /?test_reminders=<VERIFY_TOKEN>&phone=<e164>
+      if (url.searchParams.get('test_reminders') === env.VERIFY_TOKEN) {
+        const phone = url.searchParams.get('phone');
+        if (!phone) return new Response('missing phone', { status: 400 });
+        const u = await getUser(phone, env);
+        if (!u) return new Response('no such user', { status: 404 });
+        const seed = {
+          type: 'sunset', day: 'today', fire: 'before_sunset',
+          send_at: new Date(Date.now() - 60000).toISOString(), // 1 min ago = due
+          sun_time: new Date().toISOString(),
+          display: 'TEST 8:31 PM', city: u.city || 'your city', sent: false,
+        };
+        const cur = Array.isArray(u.scheduled_reminders) ? u.scheduled_reminders : [];
+        await updateUser(phone, {
+          scheduled_reminders: [...cur, seed],
+          last_message_at: new Date().toISOString(), // ensure session is open
+        }, env);
+        await dispatchDueReminders(env);
+        return new Response('dispatched — check WhatsApp + tail', { status: 200 });
+      }
+
       return new Response('Forbidden', { status: 403 });
     }
 
@@ -226,8 +272,11 @@ export default {
       } else if (freshPending === null) {
         // Fresh journey — fetchPendingAction was skipped. Clear any stale pending
         // so it can't intercept a future bare reply on a different turn.
+        // MUST be await (not ctx.waitUntil): the journey handler may write new
+        // pending synchronously right after this; an async clear would race and
+        // wipe the freshly-stored pending on the Supabase side.
         if (user?.pending_action) {
-          ctx.waitUntil(updateUser(phone, { pending_action: null }, env));
+          await updateUser(phone, { pending_action: null }, env);
           user.pending_action = null;
         }
       } else if (freshPending && !freshPending.exists) {
@@ -262,6 +311,15 @@ export default {
         console.log(`[db] getUser returned undefined (fetch error) — aborting`);
         await sendMessage(phone, 'Something went wrong on my end — please try again in a moment 🙏🏾', env);
         return new Response('OK', { status: 200 });
+      }
+
+      // Stamp the last inbound time for every existing user. The reminder cron
+      // uses this to gate sends to the open 24h WhatsApp session window — a
+      // reminder must never fire into a closed session (paid template territory).
+      // Deferred + field-scoped PATCH, so it can't clobber concurrent
+      // history/pending writes. New users get stamped on their next message.
+      if (user) {
+        ctx.waitUntil(updateUser(phone, { last_message_at: new Date().toISOString() }, env));
       }
 
       // -- New user creation + welcome ---------------------------------------
@@ -324,6 +382,19 @@ export default {
       // -- "help" keyword ----------------------------------------------------
       if (messageType === 'text' && text.trim().toLowerCase() === 'help') {
         await sendMessage(phone, getWelcomeMessage(), env);
+        return new Response('OK', { status: 200 });
+      }
+
+      // -- "cancel" keyword — clear all scheduled reminders ------------------
+      // Caught before routing so it never collides with a journey. Reads the
+      // queue fresh from Supabase (not KV) so it reliably sees a just-set
+      // reminder, and names what it cancels.
+      if (messageType === 'text' && text.trim().toLowerCase() === 'cancel') {
+        const active = await activeReminders(phone, env);
+        await clearReminders(phone, user, env);
+        await sendMessage(phone, active.length
+          ? `✅ Done — I've cancelled your ${cancelSummary(active)}.`
+          : `You don't have any reminders set right now 🙏🏾`, env);
         return new Response('OK', { status: 200 });
       }
 
@@ -441,6 +512,19 @@ export default {
           };
           const handled = await handleRebuildTithi(phone, text, user, tithiIntent, env);
           if (handled) return new Response('OK', { status: 200 });
+        }
+
+        // -- Reminder confirm: user replied after a sunset/sunrise offer ------
+        // "yes" → commit the precomputed reminder to the queue. Anything else →
+        // drop the offer and let the message route normally (fall through).
+        if (pending?.need === 'reminder_confirm') {
+          if (isShortAffirmative(20)) {
+            await commitReminder(phone, user, pending.reminder, env);
+            await sendMessage(phone, confirmText(pending.reminder), env);
+            return new Response('OK', { status: 200 });
+          }
+          await updateUser(phone, { pending_action: null }, env);
+          user.pending_action = null;
         }
 
         // -- Tithi / calendar -------------------------------------------------
@@ -572,6 +656,18 @@ export default {
         if (stalePending) {
           await updateUser(phone, { pending_action: null }, env);
           user.pending_action = null;
+        }
+
+        // -- Orphaned bare affirmative ----------------------------------------
+        // "yes", "ok", etc. with no pending context would reach Claude, which
+        // can hallucinate a confirmation for whatever was last in history (e.g.
+        // re-confirming a reminder that was just cancelled). Short affirmatives
+        // have no meaning without pending context — intercept here.
+        // Exception: hadFoodFollowup = true means Claude asked a question last
+        // turn; the "yes" is a valid reply to that question.
+        if (isShortAffirmative(20) && !hadFoodFollowup && messageType === 'text') {
+          await sendMessage(phone, `What can I help you with? 🙏🏾`, env);
+          return new Response('OK', { status: 200 });
         }
 
         // -- Orphaned bare number ---------------------------------------------
