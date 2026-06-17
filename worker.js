@@ -695,7 +695,7 @@ export default {
         // Exception: hadFoodFollowup = true means Claude asked a question last
         // turn; the reply is a valid continuation of that conversation.
         const isShortNegative = (maxLen) =>
-          /^(no|nope|nah|never|not now|not yet)\b/i.test(trimmed) && trimmed.length < maxLen;
+          /^(no|nope|nah|never|not now|not yet)[.!?]*$/i.test(trimmed) && trimmed.length < maxLen;
         if ((isShortAffirmative(20) || isShortNegative(20)) && !hadFoodFollowup && messageType === 'text') {
           await sendMessage(phone, `What can I help you with? 🙏🏾`, env);
           return new Response('OK', { status: 200 });
