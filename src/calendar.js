@@ -149,10 +149,14 @@ UPCOMING (informational only, NOT today): none`;
   const today = todayInTimezone(tz);
   const todayStr = today.toDateString();
 
-  // Find today's event (if any) and upcoming events (excluding today)
+  // Find today's event (if any) and upcoming events (tomorrow or later).
+  // The events array starts 1 day before "today" (to handle behind-UTC timezones),
+  // so filtering only != today would include yesterday. Filter >= tomorrow instead.
   const todayEvent = events.find(e => e.date.toDateString() === todayStr);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
   const upcoming = events
-    .filter(e => e.date.toDateString() !== todayStr)
+    .filter(e => e.date >= tomorrow)
     .slice(0, limit);
 
   // Today line — explicit boolean so Claude can't misread
@@ -163,8 +167,6 @@ TODAY_TITHI_NAME: ${todayEvent.summary}`
 
   // Tomorrow line — lets Claude answer "what tithi is it tomorrow" without
   // guessing or outputting UPCOMING events for a different date.
-  const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
   const tomorrowStr = tomorrow.toDateString();
   const tomorrowEvent = events.find(e => e.date.toDateString() === tomorrowStr);
   const tomorrowLine = tomorrowEvent
