@@ -44,6 +44,9 @@ export async function callClaude(messages, system, env, maxTokens = 250, ctx = n
       try {
         const u = data.usage;
         if (u && env.KV) {
+          // cache_creation multiplier assumes the 5-min cache TTL (1.25x write
+          // premium) set in utils.js buildSystemPrompt. If that TTL is raised to
+          // '1h', the real write cost is 2x — update this 1.25 to 2 to match.
           const cost = (u.input_tokens || 0) / 1e6 * 1
                      + (u.cache_creation_input_tokens || 0) / 1e6 * 1.25
                      + (u.cache_read_input_tokens || 0) / 1e6 * 0.10

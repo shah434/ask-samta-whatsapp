@@ -21,6 +21,7 @@ import {
   USE_CASE_FASTING,
   USE_CASE_CALENDAR,
 } from './prompts.js';
+import { labelFor } from './strictness.js';
 
 // All use cases joined once — this is the constant static block per community.
 const ALL_USE_CASES =
@@ -72,6 +73,22 @@ export function stripTags(text) {
   return (text || '').replace(/<[^>]*>/g, '').trim();
 }
 
+// Remove any strictness/level menu Claude generated on its own. The prompt tells
+// it the system appends that question automatically, but it sometimes tacks on
+// "Which level fits you best?\n1 — Very Strict … 5 — Relaxed". We own the ask
+// (capped per-user), so this strips Claude's version unconditionally — leaving
+// the verdict intact. Our own question, when appended, comes AFTER this runs.
+export function stripLevelMenu(text) {
+  return (text || '')
+    // A "pick your level" question line.
+    .replace(/^[^\n]*\b(?:which|what'?s|pick your|choose your)\b[^\n]*\b(?:level|strict\w*)\b[^\n]*\?\s*$/gim, '')
+    .replace(/^[^\n]*\blevel fits you\b[^\n]*$/gim, '')
+    // Bare numbered level-menu lines: "1 — Very Strict", "5 — Relaxed", etc.
+    .replace(/^\s*[1-5]\s*[—–-]\s*(?:very strict|strict|moderate|flex(?:ible)?|relaxed)\b.*$/gim, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 // Wraps fetch with an AbortController timeout. Throws AbortError if exceeded.
 export function fetchWithTimeout(url, options, ms) {
   const controller = new AbortController();
@@ -100,7 +117,7 @@ export function buildSystemPrompt(user, calendarData, sunData, searchSnippets = 
   const profile = `
 CURRENT USER PROFILE:
 Community: ${user.community || 'jain'}
-Strictness: ${user.strictness || 'not set'}
+Strictness: ${labelFor(user.strictness)}
 Language: ${user.language || 'en'}
 Observance: ${user.observance || 'none'}
 City: ${user.city || 'not set'}
@@ -115,7 +132,8 @@ TITHI RULE: Never state the tithi name or that today is/isn't a tithi — that l
   const search = searchSnippets ? `\n${searchSnippets}` : '';
 
   const strictnessReminder = !user.strictness
-    ? `\nSTRICTNESS OVERRIDE: This user has NO strictness set. For label scans, you MUST NOT output ✅ SAFE or ✋ NOT SAFE as the top verdict if any ingredient has level-dependent rules. Use ⚠️ UNCERTAIN and show the per-level breakdown.`
+    ? `\nSTRICTNESS OVERRIDE: This user has NO strictness set. Do NOT assume a level. For any strictness-sensitive verdict (food or label scan), give the single threshold answer ("safe at <Level> and more relaxed; not permitted at stricter levels") instead of one flat verdict, and end the message with the hidden marker MULTILEVEL:true on its own line. If every ingredient is safe at all five levels, or something is never permitted at any level, give one clean verdict and do NOT emit the marker.
+CRITICAL: Do NOT write any numbered level menu, "Which level fits you best?", or list of strictness options. The system appends that automatically after your response. Any such list you write will be deleted before sending and wastes tokens.`
     : '';
 
   const dynamicContent = profile + calendar + sun + search + strictnessReminder;
@@ -124,7 +142,11 @@ TITHI RULE: Never state the tithi name or that today is/isn't a tithi — that l
     {
       type: 'text',
       text: staticContent,
-      cache_control: { type: 'ephemeral', ttl: '1h' },
+      // 5-min TTL (the default — no ttl key). Write premium is 1.25x vs 2x for
+      // '1h'. Traffic is bursty (a few messages, then quiet for hours), so the
+      // 1h window rarely amortised its higher write cost. If you ever raise this
+      // back to '1h', also bump the cache_creation multiplier in claude.js to 2.
+      cache_control: { type: 'ephemeral' },
     },
     {
       type: 'text',
