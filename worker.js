@@ -412,7 +412,7 @@ export default {
       }
 
       // -- "my reminders" keyword — list all active reminders ----------------
-      if (messageType === 'text' && /^(my reminders?|reminders?|(list|show|check)( all| my| all my)? reminders?|(give|tell) me( all| my| all my)? reminders?|what( are)? (all )?my reminders?)\??$/i.test(text.trim())) {
+      if (messageType === 'text' && /^(my reminders?|reminders?|(list|show|check)( all| my| me| all my)? reminders?|(give|tell|show) me( (about|all|my|all my))? reminders?|what( are)? (all )?my reminders?|what reminders? (do i|have i|i) (have|got|set)?|(when is( my)?|do i have (any|a)?) (next )?reminders?|next reminder)\??$/i.test(text.trim())) {
         const active = await activeReminders(phone, env);
         await sendMessage(phone, listRemindersText(active), env);
         return new Response('OK', { status: 200 });
@@ -424,7 +424,7 @@ export default {
       if (messageType === 'text' && text.trim().toLowerCase() === 'details') {
         const detailsPending = readPending(user.pending_action);
         if (detailsPending?.need === 'strictness') {
-          await sendMessage(phone, getStrictnessDetails(user.community) + '\n\n' + getStrictnessQuestion(), env);
+          await sendMessage(phone, getStrictnessDetails(user.community) + '\n\n' + getStrictnessQuestion(user.community), env);
           const rec = serializePending({ need: 'strictness', intent: { journey: 'food', params: {} } });
           if (rec) await updateUser(phone, { pending_action: rec }, env);
           return new Response('OK', { status: 200 });
@@ -684,6 +684,17 @@ export default {
         // Reaching here means no journey claimed this turn → user moved on.
         const stalePending = readPending(user.pending_action);
         if (stalePending) {
+          // City-pick/city pending must NEVER be silently destroyed — the user is
+          // mid-selection and their next reply needs the pending to resolve.
+          // If their message wasn't bare enough for isBareReply, nudge them back.
+          if (stalePending.need === 'city_pick' || stalePending.need === 'city') {
+            const max = stalePending.choices?.length || 0;
+            const msg = max > 0
+              ? `Please reply with a number (1–${max}) or type the city name 🙏🏾`
+              : `Please type the city name 🙏🏾`;
+            await sendMessage(phone, msg, env);
+            return new Response('OK', { status: 200 });
+          }
           await updateUser(phone, { pending_action: null }, env);
           user.pending_action = null;
         }

@@ -68,7 +68,7 @@ export function cityJourneyClaims(user, intent, journeyName, text) {
 export function isBareReply(text) {
   const t = (text || '').trim();
   if (/^[1-9][0-9]?$/.test(t)) return true;
-  if (t.split(/\s+/).length > 2) return false;
+  if (t.split(/\s+/).length > 4) return false;
   if (/\b(eat|safe|can|is|are|what|how|vegan|veg|jain)\b/i.test(t)) return false;
   // Common acknowledgements/greetings that are never city names
   if (/^(thanks?(\s+\w+)?|thank you|got it|good\s+(morning|afternoon|evening|night)|sounds good|great|perfect|no\s+(thanks?|problem|worries)|ok|okay|sure|yes|yep|yeah|nope|no|bye|goodbye)$/i.test(t)) return false;
@@ -177,13 +177,25 @@ export async function handleCityJourney(phone, text, user, intent, env, journey)
         // already in the list in front of them.
         const norm = reply.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').replace(/\s+/g, ' ');
 
-        // Match 1: reply contains both city name + state/country
-        // e.g. "Columbus Ohio USA" → Columbus, Ohio, United States
+        // Match 1: reply contains both city name + state/country (or state abbreviation).
+        // e.g. "Columbus Ohio USA" or "Brooklyn, ny" → Brooklyn, New York, United States
+        const normWords = norm.split(/\s+/);
         const fullMatch = pending.choices.find(c => {
           const name = (c.name || '').toLowerCase();
           const admin = (c.admin1 || '').toLowerCase();
           const country = (c.country || '').toLowerCase();
-          return norm.includes(name) && (admin === '' || norm.includes(admin) || norm.includes(country));
+          // Build abbreviation as whole-word match only: "New York" → "ny"
+          // Use normWords.includes() not norm.includes() to avoid substring false-positives
+          // (e.g. "in" being a substring of "brooklyn" matching Indiana)
+          const adminAbbr = admin.split(/\s+/).map(w => w[0] || '').join('');
+          const countryAbbr = country.split(/\s+/).map(w => w[0] || '').join('');
+          return norm.includes(name) && (
+            admin === '' ||
+            norm.includes(admin) ||
+            norm.includes(country) ||
+            (adminAbbr.length >= 2 && normWords.includes(adminAbbr)) ||
+            (countryAbbr.length >= 2 && normWords.includes(countryAbbr))
+          );
         });
         if (fullMatch) {
           await saveCity(phone, user, fullMatch, env);

@@ -20,19 +20,20 @@ import {
 
 // ── CORE_IDENTITY ───────────────────────────────────────────────────────────
 describe('CORE_IDENTITY — always-banned food override', () => {
-  it('contains the hard override rule heading', () => {
-    expect(CORE_IDENTITY).toContain('ALWAYS-BANNED FOODS OVERRIDE EVERYTHING');
+  it('contains the always-banned (never-permitted) override step', () => {
+    expect(CORE_IDENTITY).toMatch(/never permitted at any level/i);
   });
 
-  it('lists all always-banned foods in the override rule', () => {
-    // These must appear together — if any one is dropped, the override is incomplete
-    for (const food of ['meat', 'fish', 'egg', 'honey', 'gelatin', 'alcohol']) {
+  it('lists the foods banned at every level (meat, fish, gelatin)', () => {
+    // Under the 5-level model only these are banned at ALL levels.
+    // Egg/honey/alcohol are now level-dependent and must NOT be in this set.
+    for (const food of ['meat', 'fish', 'gelatin']) {
       expect(CORE_IDENTITY.toLowerCase()).toContain(food);
     }
   });
 
-  it('instructs Claude to name only the always-banned food and nothing else', () => {
-    expect(CORE_IDENTITY).toContain('Name nothing else');
+  it('instructs Claude to name only the banned food, not other ingredients', () => {
+    expect(CORE_IDENTITY).toMatch(/naming only that food/i);
   });
 
 });
@@ -56,28 +57,29 @@ describe('RULES_JAIN — always-banned E-numbers', () => {
   });
 });
 
-describe('RULES_JAIN — onion and garlic strictness', () => {
-  it('marks onion/garlic as NOT PERMITTED at strict', () => {
-    // The rule must be explicit — not just "flag"
-    expect(RULES_JAIN).toMatch(/strict.*NOT PERMITTED/is);
+describe('RULES_JAIN — onion and garlic strictness (5-level)', () => {
+  it('marks onion/garlic as not permitted at the strict levels', () => {
+    expect(RULES_JAIN).toMatch(/Onion & garlic[^\n]*not permitted at Strict/i);
   });
 
-  it('marks onion/garlic as PERMITTED at flexible', () => {
-    expect(RULES_JAIN).toMatch(/flexible.*PERMITTED/is);
+  it('marks onion/garlic as allowed from Moderate', () => {
+    expect(RULES_JAIN).toMatch(/Onion & garlic[^\n]*allowed at Moderate/i);
   });
 });
 
-describe('RULES_JAIN — root vegetables', () => {
-  it('lists potato as a root vegetable', () => {
+describe('RULES_JAIN — root vegetables (5-level)', () => {
+  it('lists potato as its own stricter-than-roots item', () => {
     expect(RULES_JAIN.toLowerCase()).toContain('potato');
+    // Potato is permitted only from Flex, unlike other roots (Moderate)
+    expect(RULES_JAIN).toMatch(/Potato[^\n]*allowed at Flexible/i);
   });
 
-  it('marks root veg as NOT PERMITTED at strict', () => {
-    expect(RULES_JAIN).toContain('strict: NOT PERMITTED');
+  it('marks other root veg as not permitted at the strict levels', () => {
+    expect(RULES_JAIN).toMatch(/root vegetables[^\n]*not permitted at Strict/i);
   });
 
-  it('marks root veg as PERMITTED at moderate', () => {
-    expect(RULES_JAIN).toContain('moderate: PERMITTED');
+  it('marks other root veg as allowed from Moderate', () => {
+    expect(RULES_JAIN).toMatch(/root vegetables[^\n]*allowed at Moderate/i);
   });
 });
 

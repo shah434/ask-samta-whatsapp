@@ -4,14 +4,7 @@
 import { readPending } from './pending.js';
 import { sendMessage } from './whatsapp.js';
 import { updateUser } from './database.js';
-
-function parseStrictnessInput(text) {
-  const t = (text || '').trim();
-  if (t === '1' || /^strict$/i.test(t))   return 'strict';
-  if (t === '2' || /^moderate$/i.test(t)) return 'moderate';
-  if (t === '3' || /^flexible$/i.test(t)) return 'flexible';
-  return null;
-}
+import { parseStrictnessInput, labelFor } from './strictness.js';
 
 // Claims when:
 //   a) fresh profile_update intent (explicit statement)
@@ -31,11 +24,11 @@ export async function handleProfileUpdate(phone, text, user, intent, env) {
   // Check this BEFORE pending so "set my strictness to strict" always wins over
   // a stale pending strictness ask.
   const strictness = intent.params.strictness_level
-    // Fallback: 1/2/3 reply to a pending strictness ask
+    // Fallback: 1–5 reply to a pending strictness ask
     || (pending?.need === 'strictness' ? parseStrictnessInput(text) : null);
   if (strictness) {
     await updateUser(phone, { strictness, pending_action: null }, env);
-    await sendMessage(phone, `Got it 🙏🏾 set you to ${strictness}.\n\nTo change it later, just send *change my strictness to strict*, *moderate*, or *flexible*.`, env);
+    await sendMessage(phone, `Got it 🙏🏾 set you to *${labelFor(strictness)}*.\n\nTo change it later, just send *change my strictness to* and your level (Very Strict, Strict, Moderate, Flexible, or Relaxed).`, env);
     return true;
   }
 

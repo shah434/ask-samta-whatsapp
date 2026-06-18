@@ -8,7 +8,7 @@
 // ============================================
 
 import { describe, it, expect } from 'vitest';
-import { stripTags } from '../src/utils.js';
+import { stripTags, stripLevelMenu } from '../src/utils.js';
 import { classify } from '../src/classify.js';
 import { detectFastTerm } from '../src/fasting-match.js';
 
@@ -31,10 +31,28 @@ describe('profile_update journey', () => {
     expect(r.params.strictness_level).toBe('moderate');
   });
 
-  it('"I\'m flexible" → profile_update', () => {
+  it('"I\'m flexible" → profile_update, canonicalized to flex', () => {
     const r = classify("I'm flexible");
     expect(r.journey).toBe('profile_update');
-    expect(r.params.strictness_level).toBe('flexible');
+    expect(r.params.strictness_level).toBe('flex');
+  });
+
+  it('"make me very strict" → profile_update, very_strict', () => {
+    const r = classify('make me very strict');
+    expect(r.journey).toBe('profile_update');
+    expect(r.params.strictness_level).toBe('very_strict');
+  });
+
+  it('"relaxed" (bare) → profile_update, relaxed', () => {
+    const r = classify('relaxed');
+    expect(r.journey).toBe('profile_update');
+    expect(r.params.strictness_level).toBe('relaxed');
+  });
+
+  it('"set me to flex" → profile_update, flex', () => {
+    const r = classify('set me to flex');
+    expect(r.journey).toBe('profile_update');
+    expect(r.params.strictness_level).toBe('flex');
   });
 
   it('"I\'m BAPS" → profile_update, community: baps', () => {
@@ -78,6 +96,57 @@ describe('stripTags', () => {
 
   it('handles empty string', () => {
     expect(stripTags('')).toBe('');
+  });
+});
+
+// ============================================
+// stripLevelMenu — removes Claude's self-generated level menu
+// ============================================
+
+describe('stripLevelMenu', () => {
+  const verdict = "✅ SAFE if you're Flexible or more relaxed — ✋ not permitted at Moderate, Strict, or Very Strict, since potato is a root vegetable the stricter levels avoid.";
+
+  it('removes a self-generated "Which level fits you best?" menu', () => {
+    const input = `${verdict}
+
+Which level fits you best?
+1 — Very Strict
+2 — Strict
+3 — Moderate
+4 — Flexible
+5 — Relaxed`;
+    expect(stripLevelMenu(input)).toBe(verdict);
+  });
+
+  it('NEVER eats the threshold verdict line (which names Strict/Moderate)', () => {
+    expect(stripLevelMenu(verdict)).toBe(verdict);
+  });
+
+  it('removes the bare numbered level list on its own', () => {
+    const input = `Here you go.
+1 — Very Strict
+2 — Strict
+3 — Moderate
+4 — Flexible
+5 — Relaxed`;
+    expect(stripLevelMenu(input)).toBe('Here you go.');
+  });
+
+  it('leaves an unrelated numbered list alone', () => {
+    const input = `Try these swaps:
+1 — hing instead of onion
+2 — jaggery instead of honey`;
+    expect(stripLevelMenu(input)).toBe(input);
+  });
+
+  it('leaves a plain verdict with no menu untouched', () => {
+    const clean = '✅ SAFE — plain rice and dal are fine at every level.';
+    expect(stripLevelMenu(clean)).toBe(clean);
+  });
+
+  it('handles empty / null input', () => {
+    expect(stripLevelMenu('')).toBe('');
+    expect(stripLevelMenu(null)).toBe('');
   });
 });
 

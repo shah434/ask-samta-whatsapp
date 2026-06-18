@@ -31,6 +31,7 @@
 // ============================================
 
 import { detectFastTerm } from './fasting-match.js';
+import { LEVEL_WORD_PATTERN, parseStrictnessInput } from './strictness.js';
 
 // ── Bare topic nouns → the journey they open ────────────────────────────────
 // A message that is essentially JUST one of these (no real question, no food)
@@ -68,8 +69,14 @@ const RE_ENGLISH_FAST = /\b(fast|fasting|paryushana|paryushan|ekadashi|nirjala|j
 
 const RE_GREETING = /^(hi|hello|hey|hiya|yo|namaste|namaskar|jai jinendra|jai swaminarayan|hola|good (morning|afternoon|evening))\b[\s!.?]*$/i;
 const RE_ACCOUNT  = /\b(delete me|delete my account|delete my data|remove my data|remove me|unsubscribe|stop using|forget me|opt out|wipe my)\b/i;
-const RE_CITY_STATEMENT = /^(?:my city is|i live in|i'?m (?:from|in)|set (?:my )?city to|change my city to|update my city to)\s+([a-zA-Z][a-zA-Z\s,]+?)[?.!]*$/i;
-const RE_STRICTNESS_UPDATE = /\b(?:make (?:me|it)|set (?:me|it|my (?:strict\w*|level|setting\w*|preference\w*)) to|i'?m|i am|changed? (?:my (?:strict\w*|level|setting\w*) |it )?to|switch (?:me )?to|update (?:my (?:strict\w*|level|setting\w*) )?to)\s+(strict|moderate|flexible)\b/i;
+const RE_CITY_STATEMENT = /^(?:my city is|i live in|i'?m (?:from|in)|set (?:my )?city to|change my city to|update my city to)\s+(\d{5}|[a-zA-Z][a-zA-Z0-9\s,]+?)[?.!]*$/i;
+// Level word alternation is sourced from strictness.js so the 5 levels +
+// synonyms ("very strict", "flex", "relaxed", "monk") all route correctly.
+const RE_STRICTNESS_UPDATE = new RegExp(
+  `\\b(?:make (?:me|it)|set (?:me|it|my (?:strict\\w*|level|setting\\w*|preference\\w*)) to|i'?m|i am|changed? (?:my (?:strict\\w*|level|setting\\w*) |it )?to|switch (?:me )?to|update (?:my (?:strict\\w*|level|setting\\w*) )?to)\\s+(${LEVEL_WORD_PATTERN})\\b`,
+  'i',
+);
+const RE_BARE_LEVEL = new RegExp(`^(${LEVEL_WORD_PATTERN})[.!?]*$`, 'i');
 // Anchored at both ends so "I'm Jain, can I eat X?" doesn't fire.
 const RE_COMMUNITY_UPDATE = /^(?:i'?m|i am|make me|set (?:my community )?to|switch (?:my community|me) to|change (?:my community|me) to|i follow)\s+(?:a\s+)?(baps|jain)[?.!]*$/i;
 
@@ -235,12 +242,15 @@ export function classify(message, hasImage = false) {
   // 5c. PROFILE UPDATE — explicit strictness or community declaration.
   if (!isSunset && !isRestaurant && !isCalendar) {
     const strictnessStmt = text.match(RE_STRICTNESS_UPDATE);
-    // Also catch bare level words sent alone ("Moderate", "strict", "flexible")
+    // Also catch bare level words sent alone ("Moderate", "very strict", "flex")
     // so replies to the strictness question always update the DB, even without pending.
-    const bareLevel = /^(strict|moderate|flexible)[.!?]*$/i.exec(text.trim());
-    if (strictnessStmt?.[1] || bareLevel?.[1]) {
+    const bareLevel = RE_BARE_LEVEL.exec(text.trim());
+    const levelWord = strictnessStmt?.[1] || bareLevel?.[1];
+    // Canonicalize to a level key ("flexible"→"flex", "very strict"→"very_strict").
+    const levelKey = levelWord ? parseStrictnessInput(levelWord) : null;
+    if (levelKey) {
       intent.journey = 'profile_update';
-      intent.params.strictness_level = (strictnessStmt?.[1] || bareLevel?.[1]).toLowerCase();
+      intent.params.strictness_level = levelKey;
       intent.prompt_blocks = [];
       return intent;
     }

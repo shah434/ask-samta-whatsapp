@@ -128,17 +128,34 @@ function sunsetOffer({ askedDay, todaySun, tomorrowSun, timezone, now }) {
   }
   if (!pick || Number.isNaN(Date.parse(pick.iso))) return null;
 
-  // today → 1h before sunset; tomorrow → 8:30 AM heads-up on the sunset's day
-  // (the sunset instant is mid-day, so it reliably resolves to the right
-  // calendar date for the 8:30 AM anchor).
+  // Compute send_at and fire type:
+  //   today  → always 1h before sunset
+  //   tomorrow, sunset <24h away (late-night ask) → 1h before sunset
+  //   tomorrow, sunset ≥24h away (morning ask)    → 8:30 AM heads-up on sunset day
+  //   tomorrow, 8:30 AM also >24h away (very early ask) → now + 23h50m fallback
   const today = pick.day === 'today';
-  const sendAt = today
-    ? new Date(Date.parse(pick.iso) - HOUR_MS)
-    : localTimeToUtc(timezone, 8, 30, new Date(Date.parse(pick.iso)));
+  let sendAt, fire;
+
+  if (today) {
+    sendAt = new Date(Date.parse(pick.iso) - HOUR_MS);
+    fire = 'before_sunset';
+  } else {
+    const beforeSunset = new Date(Date.parse(pick.iso) - HOUR_MS);
+    if (applyGate(beforeSunset, now)) {
+      sendAt = beforeSunset;
+      fire = 'before_sunset';
+    } else {
+      sendAt = localTimeToUtc(timezone, 8, 30, new Date(Date.parse(pick.iso)));
+      fire = 'morning';
+      if (!applyGate(sendAt, now)) {
+        sendAt = new Date(now.getTime() + 23 * HOUR_MS + 50 * 60 * 1000);
+        if (!applyGate(sendAt, now)) return null;
+      }
+    }
+  }
+
   if (!applyGate(sendAt, now)) return null;
-  // fire: how the reminder reads — 'before_sunset' (1h before) vs 'morning'
-  // (8:30 AM heads-up). Lets the message builders pick wording without re-deriving.
-  return { type: 'sunset', day: pick.day, fire: today ? 'before_sunset' : 'morning', send_at: sendAt.toISOString(), sun_time: pick.iso, display: pick.display, city: pick.city };
+  return { type: 'sunset', day: pick.day, fire, send_at: sendAt.toISOString(), sun_time: pick.iso, display: pick.display, city: pick.city };
 }
 
 // Sunrise: the reminder is always for the NEXT sunrise (today's if still ahead,
@@ -160,7 +177,7 @@ function sunriseOffer({ todaySun, tomorrowSun, timezone, now }) {
   const nextMs = Date.parse(next.iso);
   if (Number.isNaN(nextMs)) return null;
 
-  const slot830 = localTimeToUtc(timezone, 20, 30, now);
+  const slot830 = localTimeToUtc(timezone, 20, 45, now);
   const past830 = slot830.getTime() <= now.getTime();
   const soon = (nextMs - now.getTime()) < SUNRISE_SOON_H * HOUR_MS;
 

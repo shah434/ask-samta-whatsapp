@@ -107,45 +107,49 @@ describe('computeSunReminderOffer — sunset', () => {
     expect(out.display).toBe('04:45 PM');
   });
 
-  it('asked today, <3h before sunset → 8:30 AM heads-up TOMORROW', () => {
+  it('asked today, <3h before sunset → 1h before TOMORROW sunset (within gate)', () => {
     // 4 PM EST: today's sunset 4:45 PM is 45 min away (<3h) → defer to tomorrow.
-    // Reminder is the 8:30 AM morning heads-up on the 16th (13:30Z), ~16.5h out.
+    // 1h before tomorrow's sunset (4:46 PM, 20:46Z) = 20:46Z, ~23h46m out → within gate.
     const now = new Date('2026-01-15T21:00:00Z');
     const out = computeSunReminderOffer({ sunKind: 'sunset', askedDay: 'today', todaySun: todayWinter, tomorrowSun: tomorrowWinter, timezone: TZ, now });
     expect(out.day).toBe('tomorrow');
-    expect(out.send_at).toBe('2026-01-16T13:30:00.000Z'); // 8:30 AM EST on the 16th
-    expect(wallClock(new Date(out.send_at), TZ)).toBe('08:30');
-    expect(out.display).toBe('04:46 PM'); // tomorrow's sunset time, shown in the AM nudge
-  });
-
-  it('asked tomorrow → 8:30 AM heads-up TOMORROW', () => {
-    const now = new Date('2026-01-15T21:00:00Z'); // 4 PM EST
-    const out = computeSunReminderOffer({ sunKind: 'sunset', askedDay: 'tomorrow', todaySun: todayWinter, tomorrowSun: tomorrowWinter, timezone: TZ, now });
-    expect(out.day).toBe('tomorrow');
-    expect(out.send_at).toBe('2026-01-16T13:30:00.000Z');
+    expect(out.fire).toBe('before_sunset');
+    expect(out.send_at).toBe('2026-01-16T20:46:00.000Z'); // 1h before tomorrow's sunset
     expect(out.display).toBe('04:46 PM');
   });
 
-  it('returns null when even the 8:30 AM heads-up exceeds 24h (very early ask)', () => {
+  it('asked tomorrow → 1h before tomorrow sunset when within gate', () => {
+    // 4 PM EST: tomorrow's sunset 23h46m out → 1h before fits the gate.
+    const now = new Date('2026-01-15T21:00:00Z');
+    const out = computeSunReminderOffer({ sunKind: 'sunset', askedDay: 'tomorrow', todaySun: todayWinter, tomorrowSun: tomorrowWinter, timezone: TZ, now });
+    expect(out.day).toBe('tomorrow');
+    expect(out.fire).toBe('before_sunset');
+    expect(out.send_at).toBe('2026-01-16T20:46:00.000Z');
+    expect(out.display).toBe('04:46 PM');
+  });
+
+  it('falls back to now+23h50m when the 8:30 AM heads-up exceeds 24h (very early ask)', () => {
     // 6 AM EST ask about tomorrow's sunset: 8:30 AM tomorrow (13:30Z 16th) is
-    // ~26.5h away → outside the gate. Rare, but must decline rather than misfire.
+    // ~26.5h away → outside the gate. Fall back to now + 23h50m instead of null.
     const now = new Date('2026-01-15T11:00:00Z');
     const out = computeSunReminderOffer({ sunKind: 'sunset', askedDay: 'tomorrow', todaySun: todayWinter, tomorrowSun: tomorrowWinter, timezone: TZ, now });
-    expect(out).toBeNull();
+    expect(out).not.toBeNull();
+    expect(out.fire).toBe('morning');
+    expect(out.send_at).toBe('2026-01-16T10:50:00.000Z'); // now + 23h50m
   });
 });
 
 describe('computeSunReminderOffer — sunrise', () => {
-  it('before 8:30 PM and sunrise far → reminder at 8:30 PM today', () => {
+  it('before 8:45 PM and sunrise far → reminder at 8:45 PM today', () => {
     const now = new Date('2026-01-15T18:00:00Z'); // 1 PM EST; next sunrise tomorrow 7:14 AM
     const out = computeSunReminderOffer({ sunKind: 'sunrise', todaySun: todayWinter, tomorrowSun: tomorrowWinter, timezone: TZ, now });
     expect(out.type).toBe('sunrise');
-    expect(wallClock(new Date(out.send_at), TZ)).toBe('20:30');
-    expect(out.send_at).toBe('2026-01-16T01:30:00.000Z'); // 8:30 PM EST on the 15th
+    expect(wallClock(new Date(out.send_at), TZ)).toBe('20:45');
+    expect(out.send_at).toBe('2026-01-16T01:45:00.000Z'); // 8:45 PM EST on the 15th
     expect(out.display).toBe('07:14 AM'); // tomorrow's sunrise (today's already passed)
   });
 
-  it('past 8:30 PM → 1h before next sunrise (morning-of)', () => {
+  it('past 8:45 PM → 1h before next sunrise (morning-of)', () => {
     const now = new Date('2026-01-16T02:30:00Z'); // 9:30 PM EST on the 15th
     const out = computeSunReminderOffer({ sunKind: 'sunrise', todaySun: todayWinter, tomorrowSun: tomorrowWinter, timezone: TZ, now });
     expect(out.send_at).toBe('2026-01-16T11:14:00.000Z'); // tomorrow sunrise 12:14Z - 1h

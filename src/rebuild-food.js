@@ -5,10 +5,11 @@ import { formatEventsForClaude } from './calendar.js';
 import { callClaude } from './claude.js';
 import { sendMessage } from './whatsapp.js';
 import { updateUser } from './database.js';
-import { buildSystemPrompt, buildHistoryMessages, buildHistoryUpdate, stripTags } from './utils.js';
+import { buildSystemPrompt, buildHistoryMessages, buildHistoryUpdate, stripTags, stripLevelMenu } from './utils.js';
 import { searchProductIngredients } from './search.js';
 import { serializePending, readPending } from './pending.js';
 import { getStrictnessQuestion } from './onboarding.js';
+import { labelFor, ORDINAL, LEVELS, shouldAskStrictness } from './strictness.js';
 
 const TITHI_CLAIM_PATTERNS = [
   /\btoday\s+is\s+(a\s+)?(?:beej|bij|chaturdashi|chaumasi|paryushan(?:a)?|ekadashi|atthai|attham|chhath|punam|ashtami|nom|amavasya|purnima|fast day|tithi)\b/i,
@@ -16,10 +17,6 @@ const TITHI_CLAIM_PATTERNS = [
   /\bno food (?:should be eaten )?until tomorrow\b/i,
   /\btoday\s+is\s+a\s+fast(?:ing)?\s+day\b/i,
 ];
-
-const STRICTNESS_SENSITIVE = new Set([
-  'general', 'label_scan', 'restaurant', 'substitution', 'medicine'
-]);
 
 function isLikelyGreeting(text) {
   return /^(hi|hello|hey|jai jinendra|namaste|hola)\b/i.test((text || '').trim());
@@ -115,7 +112,9 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
       if (resolvedFirstReply.trim().toUpperCase().startsWith('PRODUCT:')) {
         // Branch B: product front — search for ingredients then call Claude again
         scanBranch = 'B';
-        productName = resolvedFirstReply.trim().slice(8).trim() || null;
+        // Only the first line — Claude sometimes appends an explanation paragraph
+        // after the "PRODUCT: <name>" line, which would pollute the search query.
+        productName = resolvedFirstReply.trim().slice(8).split('\n')[0].trim() || null;
         console.log(`[image] branch=B product="${productName}" latency=${Date.now() - t0}ms`);
 
         const snippets = productName ? await searchProductIngredients(productName, env) : null;
@@ -158,15 +157,30 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
     console.log(`[perf] claude_done=${Date.now() - t0}ms`);
   }
 
+  // MULTILEVEL marker: the prompt emits this for an unset user when the verdict
+  // is level-dependent. Detect before stripping — it drives the reactive ask.
+  const multiLevelVerdict = /MULTILEVEL:\s*true/i.test(response);
+
   let cleanResponse = stripTags(response)
     .replace(/TODAY_IS_TITHI:\s*(true|false)/gi, '')
     .replace(/TODAY_TITHI_NAME:.*$/gim, '')
+    .replace(/^.*MULTILEVEL:\s*true.*$/gim, '')
     .trim();
+
+  // Suppress any level menu Claude generated itself — the prompt tells it the
+  // system appends that question, but it sometimes adds its own. We own the ask
+  // (capped below), so strip Claude's unconditionally, or a menu would keep
+  // appearing even after the cap. Our question is appended later, untouched.
+  cleanResponse = stripLevelMenu(cleanResponse);
 
   // -- Verdict correction -------------------------------------------------------
   // Runs only when strictness is set (we know the user's actual level).
   if (user.strictness) {
-    const lvl = user.strictness; // 'strict' | 'moderate' | 'flexible'
+    const lvl = user.strictness; // canonical key, e.g. 'flex' | 'very_strict'
+    // The prompt refers to levels by their label ("Flex", "Very Strict"). Match
+    // either the label or the raw key so corrections fire regardless of phrasing.
+    const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const lvlAlt = `(?:${esc(labelFor(lvl))}|${esc(lvl)})`;
 
     // Case 1: Claude self-corrected — wrote ✋ NOT SAFE but closing line confirms it's safe.
     // Flip verdict, fix all ✗ ingredient lines, strip the correction paragraph.
@@ -182,19 +196,55 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
       console.log(`[verdict] self_correction detected, corrected not_safe→safe strictness=${lvl}`);
     }
 
+    // Fix contradictory lines: ✓ symbol but body says "not permitted at [level]".
+    cleanResponse = cleanResponse.replace(
+      /^✓([^\n]*\bnot permitted at\b[^\n]*)$/gm, '✗$1'
+    );
+
     // Case 2: Claude pre-decided ✅ SAFE but correctly flagged an ingredient below.
     const hasSafeVerdict = /^✅\s*SAFE/i.test(cleanResponse.trimStart());
+
+    // Bug fix: allow optional words between "at" and the level name
+    // e.g. "not permitted at your Moderate level" would previously not match.
+    const notPermittedHere =
+      new RegExp(`not permitted at (?:\\w+ )?${lvlAlt}`, 'i').test(cleanResponse) ||
+      new RegExp(`not (?:safe|allowed) at (?:\\w+ )?${lvlAlt}`, 'i').test(cleanResponse);
+
+    // Bug fix: detect when Claude names a threshold more relaxed than the user's level,
+    // meaning the food is NOT permitted at the user's current level.
+    // e.g. "Eggs are permitted at Relaxed" for a Flex user → eggs are NOT safe at Flex.
+    const moreRelaxedLabels = LEVELS
+      .filter(k => ORDINAL[k] > ORDINAL[lvl])
+      .map(k => labelFor(k).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const permittedAtMoreRelaxed = moreRelaxedLabels.length > 0 && (() => {
+      const lbls = moreRelaxedLabels.join('|');
+      return (
+        new RegExp(`\\bonly(?:\\s+(?:permitted|allowed))?\\s+at\\s+(?:${lbls})\\b`, 'i').test(cleanResponse) ||
+        new RegExp(`\\b(?:permitted|allowed)\\s+only\\s+at\\s+(?:${lbls})\\b`, 'i').test(cleanResponse) ||
+        new RegExp(`\\bpermitted at\\s+(?:${lbls})\\b`, 'i').test(cleanResponse)
+      );
+    })();
+
     const hasFlaggedIngredient =
       /^✗/m.test(cleanResponse) ||
-      new RegExp(`not permitted at ${lvl}`, 'i').test(cleanResponse) ||
-      new RegExp(`at ${lvl}[^.]*not be permitted`, 'i').test(cleanResponse) ||
-      new RegExp(`at ${lvl}[^.]*not safe`, 'i').test(cleanResponse) ||
-      new RegExp(`at ${lvl}[^.]*would not`, 'i').test(cleanResponse) ||
-      /i.?d skip this/i.test(cleanResponse);
+      notPermittedHere ||
+      new RegExp(`at ${lvlAlt}[^.]*not be permitted`, 'i').test(cleanResponse) ||
+      new RegExp(`at ${lvlAlt}[^.]*not safe`, 'i').test(cleanResponse) ||
+      new RegExp(`at ${lvlAlt}[^.]*would not`, 'i').test(cleanResponse) ||
+      /i.?d skip this/i.test(cleanResponse) ||
+      permittedAtMoreRelaxed;
     if (hasSafeVerdict && hasFlaggedIngredient) {
       cleanResponse = cleanResponse.replace(/✅\s*SAFE/, '✋ NOT SAFE');
-      console.log(`[verdict] corrected safe→not_safe strictness=${lvl}`);
+      console.log(`[verdict] corrected safe→not_safe strictness=${lvl} permittedAtMoreRelaxed=${permittedAtMoreRelaxed}`);
     }
+  }
+
+  // Strip self-correction blocks: Claude writes "Wait — [reason]\n\n[full corrected response]".
+  // Keep only the corrected version after the "Wait" paragraph.
+  const waitMatch = cleanResponse.match(/\nWait[—–\-][^\n]*\n\n((?:✋|✅|⚠️)[\s\S]+)/i);
+  if (waitMatch) {
+    cleanResponse = waitMatch[1].trim();
+    console.log('[response] stripped self-correction block');
   }
 
 
@@ -218,36 +268,32 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
   }
 
   // -- Strictness ask --------------------------------------------------------
-  // Two triggers, same action. Only one fires per message.
+  // Ask the unset user their level ONLY when this answer was level-dependent —
+  // Claude signals that with the MULTILEVEL marker (a food/label/medicine
+  // verdict that changes with level). Safe-at-all-levels and never-permitted
+  // answers carry no marker, so casual chatter ("thanks", "who are you") that
+  // falls through classify's default `general` bucket never triggers an ask.
   //
-  // Trigger A (reactive): Claude gave a dual-verdict (strict vs moderate vs
-  // flexible levels visible in the reply) — ask right after that response.
-  //
-  // Trigger B (proactive): User has sent ≥ 2 food messages (proxy for ~10 min
-  // of use) and still has no strictness set — append the question once so we
-  // learn their level before the session goes on too long.
-  const isStrictnessSensitive = intent.prompt_blocks.some(b => STRICTNESS_SENSITIVE.has(b));
-  const levelsShown = [/\bif strict\b/i, /\bif moderate\b/i, /\bif flexible\b/i]
-    .filter(re => re.test(cleanResponse)).length;
-  const alreadyAskedStrictness = readPending(user.pending_action)?.need === 'strictness';
-  const baseGuard = !user.strictness
-    && !alreadyAskedStrictness
-    && !intent.prompt_blocks.includes('fasting')
-    && !isLikelyGreeting(text);
+  // A persistent per-user counter (strictness_ask_count) caps total asks at
+  // STRICTNESS_ASK_MAX, so we stop nagging even across many sessions. The
+  // transient strictness pending only blocks a double-ask while one is open.
+  const askCount = user.strictness_ask_count || 0;
+  const needsStrictnessAsk = shouldAskStrictness({
+    strictnessSet: !!user.strictness,
+    multiLevelVerdict,
+    askCount,
+    alreadyAsked: readPending(user.pending_action)?.need === 'strictness',
+    isFasting: intent.prompt_blocks.includes('fasting'),
+    isGreeting: isLikelyGreeting(text),
+  });
 
-  const needsStrictnessAsk =
-    baseGuard && isStrictnessSensitive && levelsShown > 1;          // Trigger A
-  // Trigger B only fires when the current message is an actual food query.
-  // Without this guard it fires on "no", "delete my account", greetings, etc.
-  const hasFoodSignal = !!(intent.params?.food_text || intent.params?.has_image || isStrictnessSensitive);
-  const proactiveStrictnessAsk =
-    baseGuard && hasFoodSignal && (user.message_count || 0) >= 3 && !needsStrictnessAsk; // Trigger B
-
-  const setPendingThisTurn = needsStrictnessAsk || proactiveStrictnessAsk;
+  const setPendingThisTurn = needsStrictnessAsk;
   if (setPendingThisTurn) {
-    cleanResponse += '\n\n' + getStrictnessQuestion();
+    cleanResponse += '\n\n' + getStrictnessQuestion(user.community);
+    const fields = { strictness_ask_count: askCount + 1 };
     const rec = serializePending({ need: 'strictness', intent });
-    if (rec) await updateUser(phone, { pending_action: rec }, env);
+    if (rec) fields.pending_action = rec;
+    await updateUser(phone, fields, env);
   }
 
   // -- Send ------------------------------------------------------------------

@@ -18,11 +18,13 @@ import { sendMessage } from './whatsapp.js';
 export function offerText(r) {
   switch (r.fire) {
     case 'before_sunset':
-      return `Want me to remind you 1 hour before sunset today? Reply *yes* 🙏🏾`;
+      return r.day === 'tomorrow'
+        ? `Want me to remind you 1 hour before tomorrow's sunset (${r.display})? Reply *yes* 🙏🏾`
+        : `Want me to remind you 1 hour before sunset today? Reply *yes* 🙏🏾`;
     case 'morning':
       return `Want a reminder for tomorrow? Tomorrow's sunset in ${r.city} is at ${r.display} — I'll send you a heads-up in the morning. Reply *yes* 🙏🏾`;
     case 'evening':
-      return `Want a reminder for the next sunrise (${r.display})? I'll nudge you tonight at 8:30 PM. Reply *yes* 🙏🏾`;
+      return `Want a reminder for the next sunrise (${r.display})? I'll nudge you tonight at 8:45 PM. Reply *yes* 🙏🏾`;
     case 'before_sunrise':
       return `Want a reminder for the next sunrise (${r.display})? I'll nudge you about 1 hour before. Reply *yes* 🙏🏾`;
     default:
@@ -34,11 +36,13 @@ export function offerText(r) {
 export function confirmText(r) {
   switch (r.fire) {
     case 'before_sunset':
-      return `Done 🙏🏾 I'll remind you 1 hour before sunset today.`;
+      return r.day === 'tomorrow'
+        ? `Done 🙏🏾 I'll remind you 1 hour before tomorrow's sunset.`
+        : `Done 🙏🏾 I'll remind you 1 hour before sunset today.`;
     case 'morning':
-      return `Done 🙏🏾 I'll send you a heads-up tomorrow morning — sunset in ${r.city} is at ${r.display}.`;
+      return `Done 🙏🏾 I'll send you a reminder tomorrow morning for tomorrow's sunset.`;
     case 'evening':
-      return `Done 🙏🏾 I'll remind you tonight at 8:30 PM. Next sunrise in ${r.city} is at ${r.display}.`;
+      return `Done 🙏🏾 I'll remind you tonight at 8:45 PM about tomorrow's sunrise.`;
     case 'before_sunrise':
       return `Done 🙏🏾 I'll remind you about 1 hour before the next sunrise (${r.display}).`;
     default:
@@ -65,6 +69,24 @@ export function reminderText(r, footer = '') {
   return `Your reminder: ${body}${footer ? `\n\n${footer}` : ''}`;
 }
 
+// Human-readable list of all active reminders. Used by the "my reminders" handler.
+export function listRemindersText(active) {
+  if (!active || active.length === 0) {
+    return `You don't have any reminders set right now 🙏🏾`;
+  }
+  const lines = active.map(r => {
+    switch (r.fire) {
+      case 'before_sunset':  return `🌇 Sunset — 1 hour before sunset (${r.display}) in ${r.city}`;
+      case 'morning':        return `🌇 Sunset — tomorrow morning (${r.display}) in ${r.city}`;
+      case 'evening':        return `🌅 Sunrise — tonight at 8:30 PM (sunrise at ${r.display}) in ${r.city}`;
+      case 'before_sunrise': return `🌅 Sunrise — 1 hour before sunrise (${r.display}) in ${r.city}`;
+      default:               return `🔔 ${r.display} in ${r.city}`;
+    }
+  });
+  const header = active.length === 1 ? `You have 1 reminder set:` : `You have ${active.length} reminders set:`;
+  return `${header}\n${lines.map(l => `• ${l}`).join('\n')}\n\nReply *cancel* to remove all.`;
+}
+
 // The footer the cron appends. If other reminders remain, name the next one and
 // offer cancel; otherwise tell the user how to set another.
 export function footerText(remaining) {
@@ -81,7 +103,10 @@ export function footerText(remaining) {
 // write. Mutates `user` in place too.
 export async function commitReminder(phone, user, reminder, env, extraFields = {}) {
   const fresh = await fetchScheduledReminders(phone, env);
-  const next = [...fresh, { ...reminder, sent: false }];
+  // Replace any existing unsent reminder of the same type — city changes create a
+  // new reminder for the same type (sunrise/sunset) and the old one is stale.
+  const deduped = fresh.filter(r => r.sent || r.type !== reminder.type);
+  const next = [...deduped, { ...reminder, sent: false }];
   await updateUser(phone, { scheduled_reminders: next, pending_action: null, ...extraFields }, env);
   user.scheduled_reminders = next;
   user.pending_action = null;
