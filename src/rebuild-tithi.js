@@ -10,6 +10,8 @@ import { buildSystemPrompt, buildHistoryMessages, buildHistoryUpdate } from './u
 import { serializePending } from './pending.js';
 import { updateUser } from './database.js';
 import { LOCATION_SHARE_INVITE } from './prompts.js';
+import { computeTithiReminderOffer } from './reminder-schedule.js';
+import { offerText } from './reminders.js';
 
 const TITHI_CLAIM_PATTERNS = [
   /\btoday\s+is\s+(a\s+)?(?:beej|bij|chaturdashi|chaumasi|paryushan(?:a)?|ekadashi|atthai|attham|chhath|punam|ashtami|nom|amavasya|purnima|fast day|tithi)\b/i,
@@ -61,12 +63,25 @@ async function answerTithi(phone, user, place, intent, env) {
   const m = calendarData.match(/TODAY_IS_TITHI:\s*true[\s\S]*?TODAY_TITHI_NAME:\s*(.+)/i);
   const tithiFact = (!askingAboutTomorrow && m) ? `Today is ${m[1].trim()} 🙏🏾\n\n` : '';
 
-  await sendMessage(phone, tithiFact + response, env);
+  // Tithi reminder offer: tomorrow is a tithi + before 7:30 PM → offer 8:30 PM tonight
+  const tithiOffer = computeTithiReminderOffer({ calendarEvents, timezone: place.timezone });
+  if (tithiOffer) tithiOffer.city = user.city || place.name || '';
 
-  // Save history + optionally set followup pending in one write.
-  const historyUpdate = buildHistoryUpdate(user, question, tithiFact + response);
+  const fullReply = tithiOffer
+    ? `${tithiFact + response}\n\n${offerText(tithiOffer)}`
+    : tithiFact + response;
 
-  if (response.trimEnd().endsWith('?') || needsFull) {
+  await sendMessage(phone, fullReply, env);
+
+  const historyUpdate = buildHistoryUpdate(user, question, fullReply);
+
+  if (tithiOffer) {
+    // Reminder offer takes priority over food followup — "yes" commits the reminder.
+    // If user asks about food instead, the pending clears and classify routes normally.
+    const rec = serializePending({ need: 'reminder_confirm', intent: { journey: 'tithi', params: {} }, reminder: tithiOffer });
+    if (rec) await updateUser(phone, { ...historyUpdate, pending_action: rec }, env);
+    else await updateUser(phone, historyUpdate, env);
+  } else if (response.trimEnd().endsWith('?') || needsFull) {
     const rec = serializePending({ need: 'tithi_food_followup', intent: { journey: 'tithi', params: {} } });
     if (rec) await updateUser(phone, { ...historyUpdate, pending_action: rec }, env);
     else await updateUser(phone, historyUpdate, env);

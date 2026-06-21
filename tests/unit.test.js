@@ -8,7 +8,7 @@
 // ============================================
 
 import { describe, it, expect } from 'vitest';
-import { stripTags, stripLevelMenu } from '../src/utils.js';
+import { stripTags, stripLevelMenu, stripLeadingFalseVerdict } from '../src/utils.js';
 import { classify } from '../src/classify.js';
 import { detectFastTerm } from '../src/fasting-match.js';
 
@@ -102,6 +102,42 @@ describe('stripTags', () => {
 // ============================================
 // stripLevelMenu — removes Claude's self-generated level menu
 // ============================================
+
+// ============================================
+// stripLeadingFalseVerdict — removes a wrong opening NOT SAFE for unset users
+// ============================================
+
+describe('stripLeadingFalseVerdict', () => {
+  const threshold = "✅ SAFE if you're Flexible or more relaxed — ✋ not permitted at Moderate, Strict, or Very Strict, since alcohol is avoided at stricter levels.";
+
+  it('strips a leading NOT SAFE paragraph when a threshold line follows', () => {
+    const input = `✋ NOT SAFE — Labatt Blue Light
+
+Alcohol is not permitted at Strict or Very Strict, and only allowed at Flexible and Relaxed. Beer contains fermented grains.
+
+Since your strictness isn't set yet, here's where this falls: ${threshold}`;
+    expect(stripLeadingFalseVerdict(input)).toBe(threshold);
+  });
+
+  it('leaves a correct threshold-only response untouched', () => {
+    expect(stripLeadingFalseVerdict(threshold)).toBe(threshold);
+  });
+
+  it('leaves a genuine always-banned NOT SAFE untouched (no threshold line follows)', () => {
+    const alwaysBanned = '✋ NOT SAFE — contains chicken, never permitted at any level.';
+    expect(stripLeadingFalseVerdict(alwaysBanned)).toBe(alwaysBanned);
+  });
+
+  it('leaves a correct ✅ SAFE response untouched', () => {
+    const safe = '✅ SAFE — plain rice and dal are fine at every level.';
+    expect(stripLeadingFalseVerdict(safe)).toBe(safe);
+  });
+
+  it('handles empty / null input', () => {
+    expect(stripLeadingFalseVerdict('')).toBe('');
+    expect(stripLeadingFalseVerdict(null)).toBe('');
+  });
+});
 
 describe('stripLevelMenu', () => {
   const verdict = "✅ SAFE if you're Flexible or more relaxed — ✋ not permitted at Moderate, Strict, or Very Strict, since potato is a root vegetable the stricter levels avoid.";

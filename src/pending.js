@@ -153,12 +153,15 @@ function isValidIntent(intent) {
 // the cron sends these fields verbatim, so they must be present and the right
 // primitive types — but we don't re-derive the times here (that's the
 // scheduler's job, already done before serialize).
-const REMINDER_TYPES = new Set(['sunset', 'sunrise']);
+const REMINDER_TYPES = new Set(['sunset', 'sunrise', 'tithi']);
 function isValidReminder(r) {
   if (!r || typeof r !== 'object') return false;
   if (!REMINDER_TYPES.has(r.type)) return false;
   if (typeof r.send_at !== 'string' || Number.isNaN(Date.parse(r.send_at))) return false;
-  if (typeof r.sun_time !== 'string' || Number.isNaN(Date.parse(r.sun_time))) return false;
+  // sun_time is required for sunset/sunrise but null for tithi
+  if (r.type !== 'tithi') {
+    if (typeof r.sun_time !== 'string' || Number.isNaN(Date.parse(r.sun_time))) return false;
+  }
   if (typeof r.display !== 'string' || !r.display) return false;
   if (typeof r.city !== 'string' || !r.city) return false;
   return true;

@@ -73,6 +73,17 @@ export function stripTags(text) {
   return (text || '').replace(/<[^>]*>/g, '').trim();
 }
 
+// For unset users: Claude sometimes opens with ✋ NOT SAFE (a Step 1 verdict)
+// for a level-dependent food like alcohol, then self-corrects to the proper
+// threshold line ("✅ SAFE if you're Flexible..."). The opening NOT SAFE
+// paragraph is wrong — strip it and keep only the threshold line.
+export function stripLeadingFalseVerdict(text) {
+  if (!/^✋\s*NOT SAFE/i.test((text || '').trimStart())) return text || '';
+  const thresholdMatch = text.match(/((?:✅|✋)[^\n]*if you'?re\b[\s\S]+)/i);
+  if (!thresholdMatch) return text;
+  return thresholdMatch[1].trim();
+}
+
 // Remove any strictness/level menu Claude generated on its own. The prompt tells
 // it the system appends that question automatically, but it sometimes tacks on
 // "Which level fits you best?\n1 — Very Strict … 5 — Relaxed". We own the ask

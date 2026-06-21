@@ -25,6 +25,7 @@
 
 const HOUR_MS = 60 * 60 * 1000;
 const DAY_MS = 24 * HOUR_MS;
+const MIN_MS = 60 * 1000;
 
 // ── PRIMITIVE 1: timezone offset at a given instant ──────────────────────────
 // Returns ms to ADD to a UTC instant to get wall-clock time in `timeZone`
@@ -156,6 +157,45 @@ function sunsetOffer({ askedDay, todaySun, tomorrowSun, timezone, now }) {
 
   if (!applyGate(sendAt, now)) return null;
   return { type: 'sunset', day: pick.day, fire, send_at: sendAt.toISOString(), sun_time: pick.iso, display: pick.display, city: pick.city };
+}
+
+// ── Tithi reminder offer ──────────────────────────────────────────────────────
+// Offer only when tomorrow IS a tithi AND current local time < 7:30 PM.
+// Fires at 8:30 PM tonight — the user gets an evening heads-up to prepare.
+// `calendarEvents` is the raw array from getCalendarCached (dates as Date objects).
+export function computeTithiReminderOffer({ calendarEvents, timezone, now = new Date() }) {
+  if (!timezone || !Array.isArray(calendarEvents)) return null;
+
+  // Resolve tomorrow's calendar date in the user's timezone using the same
+  // local-midnight construction as parseICSDate in calendar.js, so the
+  // .getTime() comparison works without UTC offset issues.
+  const df = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
+  });
+  const map = {};
+  for (const p of df.formatToParts(now)) map[p.type] = p.value;
+  const tomorrow = new Date(+map.year, +map.month - 1, +map.day + 1);
+
+  const tomorrowEvent = calendarEvents.find(e => e.date.getTime() === tomorrow.getTime());
+  if (!tomorrowEvent) return null;
+
+  // Gate: only offer before 7:30 PM local (reminder at 8:30 PM tonight must be
+  // far enough in the future to be useful).
+  const cutoff = localTimeToUtc(timezone, 19, 30, now);
+  if (now.getTime() >= cutoff.getTime()) return null;
+
+  const sendAt = localTimeToUtc(timezone, 20, 30, now);
+  if (!applyGate(sendAt, now)) return null;
+
+  return {
+    type: 'tithi',
+    fire: 'tithi_evening',
+    send_at: sendAt.toISOString(),
+    sun_time: null,
+    display: tomorrowEvent.summary,
+    city: null, // caller sets this
+    day: 'tomorrow',
+  };
 }
 
 // Sunrise: the reminder is always for the NEXT sunrise (today's if still ahead,

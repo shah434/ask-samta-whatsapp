@@ -5,7 +5,7 @@ import { formatEventsForClaude } from './calendar.js';
 import { callClaude } from './claude.js';
 import { sendMessage } from './whatsapp.js';
 import { updateUser } from './database.js';
-import { buildSystemPrompt, buildHistoryMessages, buildHistoryUpdate, stripTags, stripLevelMenu } from './utils.js';
+import { buildSystemPrompt, buildHistoryMessages, buildHistoryUpdate, stripTags, stripLevelMenu, stripLeadingFalseVerdict } from './utils.js';
 import { searchProductIngredients } from './search.js';
 import { serializePending, readPending } from './pending.js';
 import { getStrictnessQuestion } from './onboarding.js';
@@ -74,7 +74,7 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
           { type: 'image', source: { type: 'base64', media_type: mimeType, data: base64 } },
           { type: 'text', text: identifyPrompt }
         ]
-      }], system, env, 400, ctx);
+      }], system, env, 600, ctx);
       console.log(`[perf] claude_done=${Date.now() - t0}ms`);
 
       // Fallback: Claude sometimes ignores the PRODUCT: format and writes a
@@ -153,7 +153,7 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
   // -- Second Claude call for branch B and all text messages -----------------
   if (!response) {
     console.log(`[perf] claude_start=${Date.now() - t0}ms`);
-    response = await callClaude(claudeMessages, system, env, 250, ctx);
+    response = await callClaude(claudeMessages, system, env, scanBranch === 'B' ? 400 : 250, ctx);
     console.log(`[perf] claude_done=${Date.now() - t0}ms`);
   }
 
@@ -167,11 +167,51 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
     .replace(/^.*MULTILEVEL:\s*true.*$/gim, '')
     .trim();
 
+  // For unset users: Claude sometimes leads with ✋ NOT SAFE (wrong — treating
+  // a level-dependent food like alcohol as always-banned) then self-corrects to
+  // the proper threshold line. Strip the false opening, keep the threshold.
+  if (!user.strictness) {
+    // Leading false NOT SAFE followed by a threshold line (e.g. alcohol bug).
+    cleanResponse = stripLeadingFalseVerdict(cleanResponse);
+    // Transition phrases Claude adds when it knows strictness is unset:
+    // "Since your strictness isn't set yet, here's where this falls: ✅ SAFE…"
+    // Strip just the preamble clause, leave the threshold line intact.
+    cleanResponse = cleanResponse
+      .replace(/^[^\n]*\bstrictness(?:\s+isn?'?t?\s+set|'?s\s+not\s+set|\s+is(?:n'?t)?\s+set)\b[^:—]*[:—]\s*/im, '')
+      .trim();
+  }
+
   // Suppress any level menu Claude generated itself — the prompt tells it the
   // system appends that question, but it sometimes adds its own. We own the ask
   // (capped below), so strip Claude's unconditionally, or a menu would keep
   // appearing even after the cap. Our question is appended later, untouched.
   cleanResponse = stripLevelMenu(cleanResponse);
+
+  // Guard: ⚠️ UNCERTAIN header but a ✗ line exists → always-banned ingredient
+  // present. Claude sometimes picks UNCERTAIN when an uncertain ingredient
+  // (natural flavors) co-exists with an always-banned one (gelatin), letting the
+  // uncertain item "win" the header. Always-banned beats uncertain — upgrade.
+  if (/^⚠️\s*UNCERTAIN/i.test(cleanResponse.trimStart()) && /^✗/m.test(cleanResponse)) {
+    cleanResponse = cleanResponse.replace(/^⚠️\s*UNCERTAIN/, '✋ NOT SAFE');
+    console.log('[verdict] upgraded UNCERTAIN→NOT SAFE: always-banned ✗ ingredient present');
+  }
+
+  // Gap 1: ✅ SAFE header + ✗ ingredient line (unset user) → must be NOT SAFE.
+  // The hasSafeVerdict block below covers set users; unset users were unguarded.
+  // ✗ at line-start is exclusively a label-scan ingredient marker — no false-positive risk.
+  //
+  // Gap 2: ✅ SAFE header + ⚠️ ingredient line (unset user) → must be UNCERTAIN.
+  // ⚠️ appears in general responses too (warnings, notes), so this guard requires the
+  // *Ingredients:* header to confirm we're actually in a label scan format.
+  if (!user.strictness && /^✅\s*SAFE/i.test(cleanResponse.trimStart())) {
+    if (/^✗/m.test(cleanResponse)) {
+      cleanResponse = cleanResponse.replace(/^✅\s*SAFE/, '✋ NOT SAFE');
+      console.log('[verdict] upgraded SAFE→NOT SAFE (unset): ✗ ingredient present');
+    } else if (/^\*Ingredients:\*\s*$/m.test(cleanResponse) && /^⚠️/m.test(cleanResponse)) {
+      cleanResponse = cleanResponse.replace(/^✅\s*SAFE/, '⚠️ UNCERTAIN');
+      console.log('[verdict] upgraded SAFE→UNCERTAIN (unset): ⚠️ ingredient in label scan');
+    }
+  }
 
   // -- Verdict correction -------------------------------------------------------
   // Runs only when strictness is set (we know the user's actual level).
@@ -277,10 +317,16 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
   // A persistent per-user counter (strictness_ask_count) caps total asks at
   // STRICTNESS_ASK_MAX, so we stop nagging even across many sessions. The
   // transient strictness pending only blocks a double-ask while one is open.
+  // Gap 3: if the final verdict is ✋ NOT SAFE (always-banned), suppress the
+  // strictness ask even if Claude wrongly emitted MULTILEVEL:true. Asking
+  // "what's your level?" after a definitive NOT SAFE is confusing — gelatin
+  // fails at every level, so the level is irrelevant.
+  const responseIsAlwaysBanned = /^✋\s*NOT SAFE/i.test(cleanResponse.trimStart());
+
   const askCount = user.strictness_ask_count || 0;
   const needsStrictnessAsk = shouldAskStrictness({
     strictnessSet: !!user.strictness,
-    multiLevelVerdict,
+    multiLevelVerdict: multiLevelVerdict && !responseIsAlwaysBanned,
     askCount,
     alreadyAsked: readPending(user.pending_action)?.need === 'strictness',
     isFasting: intent.prompt_blocks.includes('fasting'),

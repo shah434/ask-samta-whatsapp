@@ -56,7 +56,11 @@ async function answerSunset(phone, user, place, intent, env) {
     : null;
   console.log(`[reminder] offer=${offer ? `${offer.fire}@${offer.send_at}` : 'null'} pend=${!!pendingRec} tz=${tz} askedDay=${askedDay} kind=${kind}`);
 
-  const outgoing = offer && pendingRec ? `${reply}\n\n${offerText(offer)}` : reply;
+  // Don't append a reminder offer if Claude responded with a city-ask (e.g. it
+  // couldn't determine the city from the prompt). The offer would be nonsensical
+  // — we don't have a time to remind the user about.
+  const claudeAskedForCity = /which city are you in/i.test(reply);
+  const outgoing = offer && pendingRec && !claudeAskedForCity ? `${reply}\n\n${offerText(offer)}` : reply;
   await sendMessage(phone, outgoing, env);
 
   // Save history (+ pending offer) in ONE write to avoid a KV read-modify-write

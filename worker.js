@@ -419,14 +419,19 @@ export default {
       }
 
       // -- "details" keyword — strictness level explainer --------------------
-      // Only fires when the strictness question is currently pending.
-      // Any other context falls through to normal routing.
+      // Fires when strictness question is pending (show details + re-ask),
+      // OR when the user says "details" with no other pending context
+      // (treat as "what does my strictness level mean?").
       if (messageType === 'text' && text.trim().toLowerCase() === 'details') {
         const detailsPending = readPending(user.pending_action);
         if (detailsPending?.need === 'strictness') {
           await sendMessage(phone, getStrictnessDetails(user.community) + '\n\n' + getStrictnessQuestion(user.community), env);
           const rec = serializePending({ need: 'strictness', intent: { journey: 'food', params: {} } });
           if (rec) await updateUser(phone, { pending_action: rec }, env);
+          return new Response('OK', { status: 200 });
+        }
+        if (!detailsPending) {
+          await sendMessage(phone, getStrictnessDetails(user.community), env);
           return new Response('OK', { status: 200 });
         }
       }

@@ -19,16 +19,18 @@ export function offerText(r) {
   switch (r.fire) {
     case 'before_sunset':
       return r.day === 'tomorrow'
-        ? `Want me to remind you 1 hour before tomorrow's sunset (${r.display})? Reply *yes* 🙏🏾`
-        : `Want me to remind you 1 hour before sunset today? Reply *yes* 🙏🏾`;
+        ? `Want me to remind you 1 hour before tomorrow's sunset (${r.display})? Reply *yes*`
+        : `Want me to remind you 1 hour before sunset today? Reply *yes*`;
     case 'morning':
-      return `Want a reminder for tomorrow? Tomorrow's sunset in ${r.city} is at ${r.display} — I'll send you a heads-up in the morning. Reply *yes* 🙏🏾`;
+      return `Want a heads-up tomorrow morning? Reply *yes*`;
     case 'evening':
-      return `Want a reminder for the next sunrise (${r.display})? I'll nudge you tonight at 8:45 PM. Reply *yes* 🙏🏾`;
+      return `Want a reminder for the next sunrise (${r.display})? I'll nudge you tonight at 8:45 PM. Reply *yes*`;
     case 'before_sunrise':
-      return `Want a reminder for the next sunrise (${r.display})? I'll nudge you about 1 hour before. Reply *yes* 🙏🏾`;
+      return `Want a reminder for the next sunrise (${r.display})? I'll nudge you about 1 hour before. Reply *yes*`;
+    case 'tithi_evening':
+      return `Want a reminder tonight at 8:30 PM for tomorrow's ${r.display}? Reply *yes*`;
     default:
-      return `Want me to set a reminder? Reply *yes* 🙏🏾`;
+      return `Want me to set a reminder? Reply *yes*`;
   }
 }
 
@@ -37,16 +39,18 @@ export function confirmText(r) {
   switch (r.fire) {
     case 'before_sunset':
       return r.day === 'tomorrow'
-        ? `Done 🙏🏾 I'll remind you 1 hour before tomorrow's sunset.`
-        : `Done 🙏🏾 I'll remind you 1 hour before sunset today.`;
+        ? `Done. I'll remind you 1 hour before tomorrow's sunset.`
+        : `Done. I'll remind you 1 hour before sunset today.`;
     case 'morning':
-      return `Done 🙏🏾 I'll send you a reminder tomorrow morning for tomorrow's sunset.`;
+      return `Done. I'll send you a reminder tomorrow morning for tomorrow's sunset.`;
     case 'evening':
-      return `Done 🙏🏾 I'll remind you tonight at 8:45 PM about tomorrow's sunrise.`;
+      return `Done. I'll remind you tonight at 8:45 PM about tomorrow's sunrise.`;
     case 'before_sunrise':
-      return `Done 🙏🏾 I'll remind you about 1 hour before the next sunrise (${r.display}).`;
+      return `Done. I'll remind you about 1 hour before the next sunrise (${r.display}).`;
+    case 'tithi_evening':
+      return `Done. I'll remind you tonight at 8:30 PM — tomorrow is ${r.display}.`;
     default:
-      return `Done 🙏🏾 Reminder set.`;
+      return `Done. Reminder set.`;
   }
 }
 
@@ -63,6 +67,8 @@ export function reminderText(r, footer = '') {
       body = `🌅 Tomorrow's sunrise in ${r.city} is at ${r.display}.`; break;
     case 'before_sunrise':
       body = `🌅 Sunrise in ${r.city} is in about 1 hour — at ${r.display}.`; break;
+    case 'tithi_evening':
+      body = `🙏🏾 Tomorrow is ${r.display}.`; break;
     default:
       body = `🔔 ${r.display} in ${r.city}.`;
   }
@@ -80,6 +86,7 @@ export function listRemindersText(active) {
       case 'morning':        return `🌇 Sunset — tomorrow morning (${r.display}) in ${r.city}`;
       case 'evening':        return `🌅 Sunrise — tonight at 8:30 PM (sunrise at ${r.display}) in ${r.city}`;
       case 'before_sunrise': return `🌅 Sunrise — 1 hour before sunrise (${r.display}) in ${r.city}`;
+      case 'tithi_evening':  return `🙏🏾 Tithi reminder — ${r.display} tomorrow (tonight at 8:30 PM)`;
       default:               return `🔔 ${r.display} in ${r.city}`;
     }
   });
