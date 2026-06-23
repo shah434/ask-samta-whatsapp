@@ -96,9 +96,7 @@ Onion → "✅ SAFE if you're Moderate or more relaxed — ✋ not permitted at 
 MULTILEVEL:true"
 Paneer → "✅ SAFE if you're Moderate or more relaxed — ✋ not permitted at Strict or Very Strict, since dairy is avoided there.
 MULTILEVEL:true"
-Beer / alcohol → "✅ SAFE if you're Flexible or more relaxed — ✋ not permitted at Moderate, Strict, or Very Strict, since alcohol is avoided at stricter levels.
-MULTILEVEL:true"
-(Alcohol is Step 2, NOT Step 1. Do NOT open with ✋ NOT SAFE for alcohol — it has a threshold, not a ban.)
+Beer / alcohol → "✋ NOT SAFE — alcohol is not permitted at any level of Jain practice." (no marker)
 Chicken curry → "✋ NOT SAFE — contains chicken, never permitted at any level." (no marker)
 Rice and dal → "✅ SAFE — plain rice and dal are fine at every level." (no marker)
 
