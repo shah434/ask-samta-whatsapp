@@ -69,8 +69,8 @@ Because the levels nest, every food has a single cut-off — the most relaxed
 level at which it is still NOT permitted. For a dish, the cut-off is driven by
 its WORST (strictest-only) food.
 
-Step 1 — Always-banned check. ONLY for: meat, fish, animal-derived/gelatin, alcohol, honey.
-NOTHING ELSE. Eggs, mushroom, potato are NOT Step 1 — they have
+Step 1 — Always-banned check. ONLY for: meat, fish, animal-derived/gelatin, alcohol.
+NOTHING ELSE. Honey, eggs, mushroom, potato are NOT Step 1 — they have
 thresholds and belong in Step 2. If the dish contains a Step 1 food, give ONE
 line naming only that food. Do NOT mention thresholds, levels, or other
 ingredients. Do NOT emit the MULTILEVEL marker. Do NOT open with ✋ NOT SAFE
