@@ -11,10 +11,10 @@
 // regexes — imports from here. Nothing hardcodes the level names elsewhere.
 // ============================================
 
-export const STRICTNESS_SCHEMA_VERSION = 3;
+export const STRICTNESS_SCHEMA_VERSION = 4;
 // Bump on any rule change. Embedded in the cached prompt block so a deploy
 // busts the 1h shared cache instead of serving stale rules.
-export const RULESET_VERSION = 'jain-v3';
+export const RULESET_VERSION = 'jain-v4';
 
 // Ordinal order: 1 = strictest … 5 = most relaxed.
 export const LEVELS = ['very_strict', 'strict', 'moderate', 'flex', 'relaxed'];
@@ -41,8 +41,8 @@ export const THRESHOLD = {
   meat_fish:        99,
   animal_derived:   99,   // gelatin, rennet, isinglass, lard, tallow, cochineal, shellac
   eggs:             5,
-  alcohol:          4,
-  honey:            4,
+  alcohol:          99,  // never permitted at any Jain level
+  honey:            99,  // never permitted — involves harm to insects
   mushroom:         4,
   potato:           4,
   dairy:            3,
