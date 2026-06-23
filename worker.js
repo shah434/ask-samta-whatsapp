@@ -136,8 +136,21 @@ export default {
       return new Response('Method not allowed', { status: 405 });
     }
 
+    // Verify WhatsApp webhook signature (X-Hub-Signature-256)
+    const rawBody = await req.text();
+    if (env.APP_SECRET) {
+      const sig = req.headers.get('x-hub-signature-256') || '';
+      const key = await crypto.subtle.importKey(
+        'raw', new TextEncoder().encode(env.APP_SECRET),
+        { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']
+      );
+      const mac = await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody));
+      const expected = 'sha256=' + Array.from(new Uint8Array(mac)).map(b => b.toString(16).padStart(2, '0')).join('');
+      if (sig !== expected) return new Response('Unauthorized', { status: 401 });
+    }
+
     let body;
-    try { body = await req.json(); } catch { return new Response('OK', { status: 200 }); }
+    try { body = JSON.parse(rawBody); } catch { return new Response('OK', { status: 200 }); }
     // Extract phone early so the catch block can notify the user on any downstream error.
     const debugPhone = body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from;
 
