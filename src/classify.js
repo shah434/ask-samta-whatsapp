@@ -62,8 +62,8 @@ const RE_RESTAURANT = /\b(restaurant|restaurants|eat near|food near|where to eat
 const RE_TEMPLE     = /\b(temples?|mandirs?|derasar|upashray|jain cent(?:er|re)|baps cent(?:er|re)|find.*temples?|find.*mandirs?|temples?\s+near|mandirs?\s+near)\b/i;
 const RE_SUBSTITUTE = /\b(substitute|substitution|alternative|alternatives|instead of|replace|replacement|swap)\b/i;
 const RE_MEDICINE   = /\b(medicine|medication|supplement|capsule|tablet|drug|pill|pharma|prescription|vitamin|tablets|capsules)\b/i;
-const RE_SUNSET     = /\b(sunset|sun set|when does the sun set|what time.*sun.*down)\b/i;
-const RE_SUNRISE    = /\b(sunrise|sun rise|when does the sun rise)\b/i;
+const RE_SUNSET     = /\b(sunsets?|sunet|sun set|when does the sun set|what time.*sun.*down)\b/i;
+const RE_SUNRISE    = /\b(sunrises?|sun rise|sunsrise|when does the sun rise)\b/i;
 const RE_CALENDAR   = /\b(tithi|calendar|panchang|ekadashi|paryushan(?:a)?|is today|today.*(special|fast|tithi)|what.*(tithi|day is)|special day)\b/i;
 const RE_ENGLISH_FAST = /\b(fast|fasting|paryushana|paryushan|ekadashi|nirjala|jalahar|farari|nom|punam|chaturmas|sadh.porsi|navapad|oli|varshitap|vardhaman|visasthanak|upvas|upavas|ekasan|biyasan|ayambil|chauvihar|tivihar|navkarsi|porsi|atthai|attham|chhath)\b/i;
 
@@ -143,6 +143,9 @@ function extractCityRaw(text) {
 // Strip obvious non-food words to get a rough food_text. Best-effort only;
 // the model still sees the full message, this is for telemetry/params.
 function extractFoodText(text) {
+  // "what time is X" is a time query, not a food query — "is" would falsely
+  // extract X as food text and block the sunset/routeFallback path.
+  if (/\bwhat time\b/i.test(text)) return null;
   const m = text.match(/\b(?:can i (?:eat|have|drink|take)|is|are)\s+(.+?)(?:\s+(?:safe|ok|okay|allowed|vegan|jain|during|on)\b|\?|$)/i);
   if (m && m[1] && m[1].trim().length > 1) return m[1].trim();
   return null;
@@ -215,7 +218,8 @@ export function classify(message, hasImage = false) {
   const hasFast = (fast.matched || englishFast) && !isNegatedFast;
   const hasFoodIntent = RE_FOOD_INTENT.test(lower);
   const isSunset = RE_SUNSET.test(lower) || RE_SUNRISE.test(lower);
-  const isRestaurant = RE_RESTAURANT.test(lower) || RE_TEMPLE.test(lower);
+  const isMenuLookup = /\b(menu of|in the menu|on the menu|check the menu|look.*menu|their menu)\b/i.test(lower);
+  const isRestaurant = !isMenuLookup && (RE_RESTAURANT.test(lower) || RE_TEMPLE.test(lower));
   const isTemple     = RE_TEMPLE.test(lower);
   const isSubstitute = RE_SUBSTITUTE.test(lower);
   const isMedicine = RE_MEDICINE.test(lower);
