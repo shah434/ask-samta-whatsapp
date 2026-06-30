@@ -45,7 +45,13 @@ async function hashPhone(phone) {
 }
 
 function isBareGreeting(text) {
-  return /^(hi|hello|hey|hola|namaste|jai jinendra)\b\s*[!.?]?$/i.test((text || '').trim());
+  const t = (text || '').trim();
+  if (/^(hi|hello|hey|hola|namaste|jai jinendra)\b\s*[!.?]?$/i.test(t)) return true;
+  // Greeting + bot name ("Hi Samta!", "Hello Samta")
+  if (/^(hi|hello|hey|hola|namaste)\s+samta\b[!.?]*$/i.test(t)) return true;
+  // Capability questions ("what can you help with?", "Hi Samta, what can you do?")
+  if (/\b(what can you (help|do)|what do you do|how can you help|what are you( able to)? (do|help))\b/i.test(t)) return true;
+  return false;
 }
 
 function defaultTimezoneFromPhone(phone) {

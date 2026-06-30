@@ -8,19 +8,18 @@ import { LEVELS, LABELS, ORDINAL } from './strictness.js';
 export const DEFAULT_DIET = 'jain';
 
 export function getWelcomeMessage() {
-  return `Hello 🙏🏾 I'm Samta — your friend for daily dietary and fasting questions.
+  return `Hello 🙏🏾 I'm Samta — your daily Jain helper. You can chat with me like a friend.
 
+Just send any of these to get started:
 
-You can ask me things like:
-- Is today a fast day?
-- What time is sunrise / sunset?
-- What can I eat during fast?
-- Find Jain/vegetarian restaurants near me
-- Find Jain temples / mandirs near me
-- What can I substitute for onion?
-- Are the ingredients in this food or supplement safe?
+• Is this food Jain friendly? (or send a photo)
+• Is this supplement safe? (send a photo)
+• What can I swap for eggs?
+• What time is sunset in my city?
+• When is the next tithi?
+• Find veg restaurants near me
 
-Or send a photo of any food label, menu, or product to scan 🙏🏾`;
+Just type in your own words!`;
 }
 
 export function getStrictnessDetails(community) {
@@ -39,9 +38,9 @@ export function getStrictnessDetails(community) {
 
 *${LABELS.strict}* — Like Very Strict, but leafy vegetables (spinach, methi, coriander) are allowed.
 
-*${LABELS.moderate}* — Adds back dairy, onion & garlic, other root vegetables, brinjal/figs, multi-seeded fruits, yeast/fermented foods, and ginger/turmeric powder. Still no potato, mushroom, honey, alcohol, or eggs.
+*${LABELS.moderate}* — Adds back dairy, onion & garlic, root vegetables (including potato), brinjal/figs, multi-seeded fruits, yeast/fermented foods, and ginger/turmeric powder. Still no mushroom, honey, alcohol, or eggs.
 
-*${LABELS.flex}* — Standard vegetarian, no eggs. Adds back potato, mushrooms, honey, alcohol, and fresh ginger/turmeric.
+*${LABELS.flex}* — Standard vegetarian, no eggs. Adds back mushrooms, honey, alcohol, and fresh ginger/turmeric.
 
 *${LABELS.relaxed}* — Vegetarian including eggs. Only meat, fish, and animal-derived products (gelatin) are avoided.`;
 }
@@ -59,7 +58,7 @@ Type *details* to see what's allowed at each level before choosing.`;
   const blurbs = {
     very_strict: 'monk-level, no exceptions',
     strict:      'no animal, no roots, leafy greens ok',
-    moderate:    'dairy, onion/garlic & roots ok; no potato/mushroom/honey',
+    moderate:    'dairy, onion/garlic, roots & potato ok; no mushroom/honey',
     flex:        'standard vegetarian, no eggs',
     relaxed:     'vegetarian including eggs',
   };

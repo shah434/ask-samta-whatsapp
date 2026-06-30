@@ -44,7 +44,7 @@ export const THRESHOLD = {
   alcohol:          99,  // never permitted at any Jain level
   honey:            4,   // permitted at Flexible and Relaxed
   mushroom:         4,
-  potato:           4,
+  potato:           3,
   dairy:            3,
   onion_garlic:     3,
   other_root_veg:   3,
@@ -174,8 +174,7 @@ PERMITTED ONLY AT THE LOOSER LEVELS (NOT PERMITTED at any stricter level):
 - Alcohol — allowed at ${at(4)} [4] and ${at(5)}. Not permitted at ${at(3)} and stricter.
 - Honey — allowed at ${at(4)} [4] and looser. Not permitted at ${at(3)} and stricter.
 - Mushrooms / fungi — allowed at ${at(4)} [4] and looser. Not permitted at ${at(3)} and stricter.
-- Potato — allowed at ${at(4)} [4] and looser. Not permitted at ${at(3)} and stricter.
-  (Potato is stricter than other root vegetables — treat it on its own.)
+- Potato — allowed at ${at(3)} [3] and looser. Not permitted at ${at(2)} and stricter.
 - Dairy (milk, paneer, ghee, curd, butter, cream) — allowed at ${at(3)} [3] and looser. Not permitted at ${at(2)} and ${at(1)}.
 - Onion & garlic (all forms) — allowed at ${at(3)} [3] and looser. Not permitted at ${at(2)} and ${at(1)}.
 - Other root vegetables (${MEMBERS.other_root_veg}) — allowed at ${at(3)} [3] and looser. Not permitted at ${at(2)} and ${at(1)}.

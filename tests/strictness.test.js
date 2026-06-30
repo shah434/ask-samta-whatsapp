@@ -86,9 +86,9 @@ describe('strictness — thresholds encode the matrix', () => {
     }
   });
 
-  it('potato is stricter than other roots — Flex (4), not Moderate (3)', () => {
-    expect(allowedAt('potato', 3)).toBe(false);
-    expect(allowedAt('potato', 4)).toBe(true);
+  it('potato is allowed at Moderate (3) and looser', () => {
+    expect(allowedAt('potato', 2)).toBe(false);
+    expect(allowedAt('potato', 3)).toBe(true);
     expect(allowedAt('other_root_veg', 3)).toBe(true);
   });
 

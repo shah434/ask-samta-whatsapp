@@ -140,7 +140,7 @@ Since your strictness isn't set yet, here's where this falls: ${threshold}`;
 });
 
 describe('stripLevelMenu', () => {
-  const verdict = "✅ SAFE if you're Flexible or more relaxed — ✋ not permitted at Moderate, Strict, or Very Strict, since potato is a root vegetable the stricter levels avoid.";
+  const verdict = "✅ SAFE if you're Moderate or more relaxed — ✋ not permitted at Strict or Very Strict, since potato is a root vegetable the stricter levels avoid.";
 
   it('removes a self-generated "Which level fits you best?" menu', () => {
     const input = `${verdict}

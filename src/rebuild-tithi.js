@@ -67,6 +67,19 @@ async function answerTithi(phone, user, place, intent, env) {
   const tithiOffer = computeTithiReminderOffer({ calendarEvents, timezone: place.timezone });
   if (tithiOffer) tithiOffer.city = user.city || place.name || '';
 
+  // When today is NOT a tithi but tomorrow IS (and this isn't a full calendar query),
+  // skip Claude's response entirely and use a clean crafted message. This avoids
+  // the "Tithis shift by location..." caveat Claude adds, and saves a Claude call.
+  if (tithiOffer && !todayIsTithi && !needsFull) {
+    const fullReply = `Today isn't a listed tithi day — but tomorrow is ${tithiOffer.display} 🙏🏾\n\nWant a reminder tonight at 8:30 PM so you're prepared? Reply *yes*`;
+    await sendMessage(phone, fullReply, env);
+    const historyUpdate = buildHistoryUpdate(user, question, fullReply);
+    const rec = serializePending({ need: 'reminder_confirm', intent: { journey: 'tithi', params: {} }, reminder: tithiOffer });
+    if (rec) await updateUser(phone, { ...historyUpdate, pending_action: rec }, env);
+    else await updateUser(phone, historyUpdate, env);
+    return;
+  }
+
   const fullReply = tithiOffer
     ? `${tithiFact + response}\n\n${offerText(tithiOffer)}`
     : tithiFact + response;
@@ -98,7 +111,7 @@ export async function handleRebuildTithi(phone, text, user, intent, env) {
 
   return handleCityJourney(phone, text, user, intent, env, {
     name: 'tithi',
-    askCityPrompt: `Which city and state are you in? (e.g. *San Diego, CA*) — I need it to get the right timezone 🙏🏾${LOCATION_SHARE_INVITE}`,
+    askCityPrompt: `Which city and state are you in? (e.g. *San Diego, CA* or a US ZIP code) — I need it to get the right timezone 🙏🏾${LOCATION_SHARE_INVITE}`,
     answer: answerTithi,
     fallbackToSaved: true, // if city saved, use it without re-asking
   });

@@ -13,13 +13,14 @@ const ROUTER_PROMPT = `You are a router for a Jain/vegetarian WhatsApp bot. Read
 {"journey":"<one of: food|tithi|sunset|restaurant|pachkhan|offtopic>","city":"<city name if the message names one, else empty>"}
 
 Rules:
-- restaurant: asking where to eat / find places / food spots in a location.
+- restaurant: asking where to eat / find places / food spots in a location. NOT recipes or home cooking.
 - sunset: asking sunset/sunrise time.
 - tithi: asking if today is a fast day / tithi / religious calendar.
 - pachkhan: asking the RULES of a fast (no specific food named).
-- food: asking if a specific food/ingredient/product is safe to eat.
+- food: asking if a specific food/ingredient/product is safe to eat, OR asking for meal ideas, recipes, or ingredient substitutes to make at home.
 - offtopic: unrelated to diet/fasting/food (sports, politics, code, chitchat).
 - city: only if the message explicitly names a place. Else "".
+- IMPORTANT: "meal ideas", "recipes", "make at home", "cook at home", "high-protein meals" → food, not restaurant.
 Reply with JSON only.`;
 
 // Returns { journey, city } or null on any failure (caller keeps food default).

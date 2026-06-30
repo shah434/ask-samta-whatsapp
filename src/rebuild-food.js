@@ -30,11 +30,9 @@ export async function handleRebuildFood(phone, text, user, intent, env, context)
   // Only Jain users need it, and only when the query touches fasting/tithi/today.
   // Pure ingredient or label checks don't need upcoming events — skipping saves
   // tokens in the dynamic prompt block (the only block that isn't prompt-cached).
-  const needsCalendar = user.community === 'jain' && (
-    intent.prompt_blocks.includes('fasting') ||
-    intent.prompt_blocks.includes('calendar') ||
-    /tithi|fast|upvas|ayambil|ekasan|biyasan|chauvihar|tivihar|navkarsi|paryushan|today/i.test(text)
-  );
+  // Always include calendar for Jain users — even plain food questions need
+  // today's tithi status so Claude doesn't hallucinate yesterday's fast from history.
+  const needsCalendar = user.community === 'jain';
   const calendarData = needsCalendar
     ? formatEventsForClaude(calendarEvents, user.timezone, 3)
     : '';

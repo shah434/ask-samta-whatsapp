@@ -68,10 +68,9 @@ describe('RULES_JAIN — onion and garlic strictness (5-level)', () => {
 });
 
 describe('RULES_JAIN — root vegetables (5-level)', () => {
-  it('lists potato as its own stricter-than-roots item', () => {
+  it('lists potato allowed at Moderate and looser', () => {
     expect(RULES_JAIN.toLowerCase()).toContain('potato');
-    // Potato is permitted only from Flex, unlike other roots (Moderate)
-    expect(RULES_JAIN).toMatch(/Potato[^\n]*allowed at Flexible/i);
+    expect(RULES_JAIN).toMatch(/Potato[^\n]*allowed at Moderate/i);
   });
 
   it('marks other root veg as not permitted at the strict levels', () => {

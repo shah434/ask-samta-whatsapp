@@ -145,8 +145,9 @@ Sunrise: ${sunData.sunrise}
 Sunset: ${sunData.sunset}
 Timezone: ${sunData.timezoneId}
 ========================================
-You MUST use these exact times verbatim.
+You MUST use these exact times and this exact city name verbatim.
 Do NOT round, estimate, recalculate, or change them.
+Do NOT use any city name from conversation history — use only "${sunData.city}".
 If you write any time other than "${sunData.sunset}" for sunset
 or "${sunData.sunrise}" for sunrise, you are wrong.`;
 }

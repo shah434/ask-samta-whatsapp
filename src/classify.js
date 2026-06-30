@@ -58,7 +58,7 @@ const BARE_TOPIC = {
 };
 
 // ── Keyword sets ────────────────────────────────────────────────────────────
-const RE_RESTAURANT = /\b(restaurant|restaurants|eat near|food near|where to eat|where can i eat|find jain|find baps|places to eat|somewhere to eat)\b/i;
+const RE_RESTAURANT = /\b(restaurant|restaurants|eat near|food near|where to eat|where can i eat|places to eat|somewhere to eat)\b/i;
 const RE_TEMPLE     = /\b(temples?|mandirs?|derasar|upashray|jain cent(?:er|re)|baps cent(?:er|re)|find.*temples?|find.*mandirs?|temples?\s+near|mandirs?\s+near)\b/i;
 const RE_SUBSTITUTE = /\b(substitute|substitution|alternative|alternatives|instead of|replace|replacement|swap)\b/i;
 const RE_MEDICINE   = /\b(medicine|medication|supplement|capsule|tablet|drug|pill|pharma|prescription|vitamin|tablets|capsules)\b/i;
@@ -69,7 +69,7 @@ const RE_ENGLISH_FAST = /\b(fast|fasting|paryushana|paryushan|ekadashi|nirjala|j
 
 const RE_GREETING = /^(hi|hello|hey|hiya|yo|namaste|namaskar|jai jinendra|jai swaminarayan|hola|good (morning|afternoon|evening))\b[\s!.?]*$/i;
 const RE_ACCOUNT  = /\b(delete me|delete my account|delete my data|remove my data|remove me|unsubscribe|stop using|forget me|opt out|wipe my)\b/i;
-const RE_CITY_STATEMENT = /^(?:my city is|i live in|i'?m (?:from|in)|set (?:my )?city to|change my city to|update my city to)\s+(\d{5}|[a-zA-Z][a-zA-Z0-9\s,]+?)[?.!]*$/i;
+const RE_CITY_STATEMENT = /^(?:my (?:city|location|place) is|i live in|i'?m (?:from|in)|set (?:my )?(?:city|location) to|change my (?:city|location) to|update my (?:city|location) to)\s+(\d{5}|[a-zA-Z][a-zA-Z0-9\s,]+?)[?.!]*$/i;
 // Level word alternation is sourced from strictness.js so the 5 levels +
 // synonyms ("very strict", "flex", "relaxed", "monk") all route correctly.
 const RE_STRICTNESS_UPDATE = new RegExp(
@@ -219,7 +219,8 @@ export function classify(message, hasImage = false) {
   const hasFoodIntent = RE_FOOD_INTENT.test(lower);
   const isSunset = RE_SUNSET.test(lower) || RE_SUNRISE.test(lower);
   const isMenuLookup = /\b(menu of|in the menu|on the menu|check the menu|look.*menu|their menu)\b/i.test(lower);
-  const isRestaurant = !isMenuLookup && (RE_RESTAURANT.test(lower) || RE_TEMPLE.test(lower));
+  const isNegatedRestaurant = /\b(not (a |looking for |finding )?restaurants?|looking for recipes?|not eating out)\b/i.test(lower);
+  const isRestaurant = !isMenuLookup && !isNegatedRestaurant && (RE_RESTAURANT.test(lower) || RE_TEMPLE.test(lower));
   const isTemple     = RE_TEMPLE.test(lower);
   const isSubstitute = RE_SUBSTITUTE.test(lower);
   const isMedicine = RE_MEDICINE.test(lower);

@@ -30,7 +30,7 @@ import { fetchWithTimeout } from './utils.js';
 const GEOCODE_URL = 'https://geocoding-api.open-meteo.com/v1/search';
 const NON_CITIES = ['me', 'here', 'my area', 'nearby', 'near me'];
 
-// US state codes → full admin1 names (used to narrow ambiguous results).
+// State/province codes → full admin1 names (used to narrow ambiguous results).
 const US_STATES = {
   al:'Alabama',ak:'Alaska',az:'Arizona',ar:'Arkansas',ca:'California',
   co:'Colorado',ct:'Connecticut',de:'Delaware',fl:'Florida',ga:'Georgia',
@@ -43,6 +43,11 @@ const US_STATES = {
   sc:'South Carolina',sd:'South Dakota',tn:'Tennessee',tx:'Texas',ut:'Utah',
   vt:'Vermont',va:'Virginia',wa:'Washington',wv:'West Virginia',
   wi:'Wisconsin',wy:'Wyoming',dc:'District of Columbia',
+  // Canadian provinces
+  ab:'Alberta',bc:'British Columbia',mb:'Manitoba',nb:'New Brunswick',
+  nl:'Newfoundland and Labrador',ns:'Nova Scotia',on:'Ontario',
+  pe:'Prince Edward Island',qc:'Quebec',sk:'Saskatchewan',
+  nt:'Northwest Territories',nu:'Nunavut',yt:'Yukon',
 };
 
 export async function resolveLocation(cityRaw) {
@@ -127,10 +132,41 @@ export async function resolveLocation(cityRaw) {
       cleanCity = cleanCity.replace(new RegExp(`\\s+${fullStateStrip}\\s*$`, 'i'), '').trim();
     }
 
+    // If the input ends with " state" and the base is a US/Canadian state name,
+    // return missing — "California state" means the geographic state, not a city.
+    // We don't block bare state names (e.g. "New York", "Washington") because
+    // those are also major cities users legitimately ask about.
+    const stateNames = new Set(Object.values(US_STATES).map(s => s.toLowerCase()));
+    if (/\bstate$/i.test(cleanCity)) {
+      const baseForStateCheck = cleanCity.replace(/\s+state$/i, '').trim().toLowerCase();
+      if (stateNames.has(baseForStateCheck)) return { status: 'missing' };
+    }
+
     const url = `${GEOCODE_URL}?name=${encodeURIComponent(cleanCity)}&count=5&language=en&format=json`;
     const res = await fetchWithTimeout(url, {}, 3000);
     const data = await res.json();
-    const results = data.results || [];
+    let results = data.results || [];
+
+    // Fallback: if no results, the user likely appended a country or state name
+    // that isn't stripped (e.g. "Mumbai India", "Mumbai, India Maharashtra").
+    // Try progressively shorter queries until something hits.
+    if (results.length === 0) {
+      const fallbacks = [];
+      // First try the part before the first comma in the original input.
+      const priorComma = raw.split(',')[0].trim();
+      if (priorComma && priorComma !== cleanCity) fallbacks.push(priorComma);
+      // Then try dropping the last word of cleanCity one at a time.
+      const words = cleanCity.split(/\s+/);
+      for (let i = words.length - 1; i >= 1; i--) {
+        const shorter = words.slice(0, i).join(' ');
+        if (shorter && shorter !== priorComma) fallbacks.push(shorter);
+      }
+      for (const q of fallbacks) {
+        const r2 = await fetchWithTimeout(`${GEOCODE_URL}?name=${encodeURIComponent(q)}&count=5&language=en&format=json`, {}, 3000);
+        const d2 = await r2.json();
+        if ((d2.results || []).length > 0) { results = d2.results; break; }
+      }
+    }
 
     if (results.length === 0) return { status: 'missing' };
 
@@ -153,7 +189,18 @@ export async function resolveLocation(cityRaw) {
     if (candidates.length === 1) {
       return { status: 'resolved', place: toPlace(candidates[0]) };
     }
-    return { status: 'ambiguous', candidates: candidates.slice(0, 4).map(toPlace) };
+    // Deduplicate by display label before slicing to 4.
+    const seen = new Set();
+    const deduped = candidates.filter(r => {
+      const label = `${r.name}|${r.admin1 || ''}|${r.country || ''}`;
+      if (seen.has(label)) return false;
+      seen.add(label);
+      return true;
+    });
+    if (deduped.length === 1) {
+      return { status: 'resolved', place: toPlace(deduped[0]) };
+    }
+    return { status: 'ambiguous', candidates: deduped.slice(0, 4).map(toPlace) };
 
   } catch (err) {
     console.log(`[resolver] error city="${raw}" err=${err.message}`);
@@ -171,6 +218,7 @@ function toPlace(r) {
     longitude: r.longitude,
     timezone: r.timezone,
     admin1: r.admin1 || null,
+    admin2: r.admin2 || null,
     country: r.country || null,
   };
 }
@@ -179,9 +227,15 @@ function toPlace(r) {
 // Includes the "add state/country if yours isn't listed" nudge so users
 // whose city falls outside the top 4 know how to narrow it down.
 export function formatCandidatePicker(cityRaw, candidates) {
-  const lines = candidates.map((c, i) =>
-    `${i + 1} — ${c.name}${c.admin1 ? ', ' + c.admin1 : ''}${c.country ? ', ' + c.country : ''}`
-  ).join('\n');
+  // Show admin2 (county/district) when two entries share the same admin1+country.
+  const labels = candidates.map(c => `${c.admin1 || ''}|${c.country || ''}`);
+  const hasDupe = (i) => labels.some((l, j) => j !== i && l === labels[i]);
+  const lines = candidates.map((c, i) => {
+    const region = c.admin1
+      ? (hasDupe(i) && c.admin2 ? `${c.admin2}, ${c.admin1}` : c.admin1)
+      : '';
+    return `${i + 1} — ${c.name}${region ? ', ' + region : ''}${c.country ? ', ' + c.country : ''}`;
+  }).join('\n');
   return `I found a few places called "${cityRaw}". Which one?\n\n${lines}\n\n` +
     `Reply with the number — or type a more specific name, e.g. *Columbus, Ohio* or *Columbus, GA*.`;
 }

@@ -56,11 +56,15 @@ async function answerSunset(phone, user, place, intent, env) {
     : null;
   console.log(`[reminder] offer=${offer ? `${offer.fire}@${offer.send_at}` : 'null'} pend=${!!pendingRec} tz=${tz} askedDay=${askedDay} kind=${kind}`);
 
-  // Don't append a reminder offer if Claude responded with a city-ask (e.g. it
-  // couldn't determine the city from the prompt). The offer would be nonsensical
-  // — we don't have a time to remind the user about.
+  // Don't append a reminder offer if Claude responded with a city-ask or an
+  // error/apology (e.g. it couldn't fetch data, or hallucinated a failure).
   const claudeAskedForCity = /which city are you in/i.test(reply);
-  const outgoing = offer && pendingRec && !claudeAskedForCity ? `${reply}\n\n${offerText(offer)}` : reply;
+  const claudeIndicatesError = /couldn'?t|don'?t have|unable to|not available|try again|ask me again/i.test(reply);
+  if (claudeIndicatesError) console.log(`[sunset] claude_error_reply city="${place.name}" reply="${reply.slice(0, 120)}"`);
+  if (!claudeIndicatesError && !reply.toLowerCase().includes(place.name.toLowerCase().split(',')[0])) {
+    console.log(`[sunset] city_mismatch expected="${place.name}" reply="${reply.slice(0, 120)}"`);
+  }
+  const outgoing = offer && pendingRec && !claudeAskedForCity && !claudeIndicatesError ? `${reply}\n\n${offerText(offer)}` : reply;
   await sendMessage(phone, outgoing, env);
 
   // Save history (+ pending offer) in ONE write to avoid a KV read-modify-write
@@ -73,7 +77,7 @@ async function answerSunset(phone, user, place, intent, env) {
 export async function handleRebuildSunset(phone, text, user, intent, env) {
   return handleCityJourney(phone, text, user, intent, env, {
     name: 'sunset',
-    askCityPrompt: `Which city should I check sunset for? (e.g. *San Diego, CA*) 🙏🏾${LOCATION_SHARE_INVITE}`,
+    askCityPrompt: `Which city should I check sunset for? (e.g. *San Diego, CA* or a US ZIP code) 🙏🏾${LOCATION_SHARE_INVITE}`,
     answer: answerSunset,
   });
 }

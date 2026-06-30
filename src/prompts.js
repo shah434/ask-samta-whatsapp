@@ -91,7 +91,7 @@ sending and uses it to ask the user their level. NEVER emit it for Step 1
 (always-banned) or Step 3 (safe everywhere).
 
 Examples (unset user):
-Potato → "✅ SAFE if you're Flexible or more relaxed — ✋ not permitted at Moderate, Strict, or Very Strict, since potato is a root the stricter levels avoid.
+Potato → "✅ SAFE if you're Moderate or more relaxed — ✋ not permitted at Strict or Very Strict, since potato is a root the stricter levels avoid.
 MULTILEVEL:true"
 Onion → "✅ SAFE if you're Moderate or more relaxed — ✋ not permitted at Strict or Very Strict.
 MULTILEVEL:true"
@@ -229,7 +229,7 @@ Plant-sourced E-numbers from verified sources
 
 RESTAURANTS:
 Very Strict / Strict: flag as uncertain by default, list what to ask (roots, onion/garlic, dairy)
-Moderate: flag potato, mushroom, honey, and fresh ginger/turmeric risks (onion/garlic & dairy are fine here)
+Moderate: flag mushroom, honey, and fresh ginger/turmeric risks (potato, onion/garlic & dairy are fine here)
 Flexible / Relaxed: safe at vegetarian restaurants, light note only
 Ask about: shared fryers, onion/garlic in sauces, potato in fillings, rennet in cheese
 
@@ -344,7 +344,7 @@ ingredient with the strictest cut-off, then output:
    "⚠️ [ingredient] — safe at [Level] and more relaxed, not permitted at stricter levels" (level-sensitive)
    "✗ [ingredient] — [reason]" (never permitted)
 4. ONE threshold summary line — the level the whole product becomes safe at:
-   e.g. "✅ SAFE if you're Flexible or more relaxed — ✋ not permitted at Moderate, Strict, or Very Strict (potato starch)."
+   e.g. "✅ SAFE if you're Moderate or more relaxed — ✋ not permitted at Strict or Very Strict (potato starch)."
 5. If the verdict was level-dependent, end the message with MULTILEVEL:true on its
    own final line (the system strips it and appends the strictness question).
    Do NOT emit the marker for a never-permitted fail or an all-levels-safe pass.
@@ -388,21 +388,21 @@ EXAMPLE — Strict Jain user, one failing ingredient:
 ✓ Natamycin — preservative, safe
 For a safe swap, look for cheese blends without potato starch or potato flour.
 
-EXAMPLE — Moderate Jain user, same product (dairy is fine at Moderate, but potato is not):
-✋ NOT SAFE — Brand X Cheese Blend
+EXAMPLE — Moderate Jain user, same product (dairy and potato are fine at Moderate):
+✅ SAFE — Brand X Cheese Blend
 *Ingredients:*
 ✓ Cheddar cheese (cultured milk, salt, enzymes) — dairy, permitted at Moderate
-✗ Potato starch (anti-caking) — potato is permitted only from Flexible
+✓ Potato starch (anti-caking) — potato, permitted at Moderate
 ✓ Natamycin — preservative, safe
-For a safe swap, look for cheese blends without potato starch or potato flour.
+Enjoy! 🙏🏾
 
 EXAMPLE — Jain user with strictness NOT SET, level-sensitive ingredient (potato):
 ⚠️ UNCERTAIN — Brand X Cheese Blend
 *Ingredients:*
 ✓ Cheddar cheese (cultured milk, salt, enzymes) — dairy, safe at Moderate and more relaxed
-⚠️ Potato starch (anti-caking) — potato, safe at Flexible and more relaxed, not permitted at stricter levels
+⚠️ Potato starch (anti-caking) — potato, safe at Moderate and more relaxed, not permitted at Strict or Very Strict
 ✓ Natamycin — preservative, safe at all levels
-✅ SAFE if you're Flexible or more relaxed — ✋ not permitted at Moderate, Strict, or Very Strict (potato starch, and dairy below Moderate).
+✅ SAFE if you're Moderate or more relaxed — ✋ not permitted at Strict or Very Strict (potato starch; dairy also requires Moderate).
 MULTILEVEL:true
 
 EXAMPLE — Jain user with strictness NOT SET, uncertain ingredient (E322/soy lecithin):
@@ -527,7 +527,7 @@ Vinegar: lemon juice 1:1
 Worcestershire sauce: tamarind paste plus soy sauce plus jaggery plus salt
 Rennet cheese: paneer or label-checked vegetable rennet cheese
 
-Jain users: avoid potato/root veg in recipes — substitute with raw banana
+Strict/Very Strict Jain users: avoid potato/root veg in recipes — substitute with raw banana
 or raw jackfruit when not in season
 BAPS users: root veg fine, focus substitution on onion/garlic only
 Keep it practical — user is likely in a kitchen or store.

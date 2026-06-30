@@ -136,7 +136,8 @@ Today's date: ${today}`;
 
   const calendar = calendarData
     ? `\nJAIN CALENDAR — NEXT 30 DAYS:\n${calendarData}
-TITHI RULE: Never state the tithi name or that today is/isn't a tithi — that line is added separately. If today is a tithi, give ONLY a 2-line explanation of its dietary practice. Do not name it. Do NOT open with any greeting (no "Jai Jinendra", "🙏🏾", etc.) — a greeting is already added separately.`
+TITHI RULE: Never state the tithi name or that today is/isn't a tithi — that line is added separately. If today is a tithi, give ONLY a 2-line explanation of its dietary practice. Do not name it. Do NOT open with any greeting (no "Jai Jinendra", "🙏🏾", etc.) — a greeting is already added separately.
+HISTORY WARNING: Conversation history may reference tithis from previous days. TODAY_IS_TITHI above is the only authoritative source for today's fasting status — do NOT infer it from anything mentioned in history.`
     : '';
 
   const sun    = sunData        ? `\n${sunData}`        : '';
